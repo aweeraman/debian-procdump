@@ -5,8 +5,8 @@ Maintainer: Anuradha Weeraman <anuradha@debian.org>
 Build-Depends: debhelper-compat (= 12), zlib1g-dev
 Standards-Version: 4.5.0
 Homepage: https://github.com/microsoft/ProcDump-for-Linux
-#Vcs-Browser: https://salsa.debian.org/debian/procdump
-#Vcs-Git: https://salsa.debian.org/debian/procdump.git
+Vcs-Browser: https://salsa.debian.org/anuradha/procdump
+Vcs-Git: https://salsa.debian.org/anuradha/procdump.git
 
 Package: procdump
 Architecture: any
