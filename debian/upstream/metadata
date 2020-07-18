@@ -1,0 +1,9 @@
+{
+  "Name": "procdump",
+  "Documentation": "https://github.com/microsoft/ProcDump-for-Linux",
+  "Archive": "GitHub",
+  "Bug-Database": "https://github.com/microsoft/ProcDump-for-Linux/issues",
+  "Bug-Submit": "https://github.com/microsoft/ProcDump-for-Linux/issues/new",
+  "Repository": "https://github.com/microsoft/ProcDump-for-Linux.git",
+  "Repository-Browse": "https://github.com/microsoft/ProcDump-for-Linux"
+}
