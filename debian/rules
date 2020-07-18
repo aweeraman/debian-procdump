@@ -10,6 +10,9 @@ CFLAGS+=-Wl,--as-needed,-z,relro,-z,now -Wdate-time
 %:
 	dh $@
 
+override_dh_auto_build:
+	$(MAKE) all
+
 override_dh_auto_install:
 	dh_auto_install
 
