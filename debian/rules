@@ -5,7 +5,8 @@ DPKG_EXPORT_BUILDFLAGS = 1
 
 include /usr/share/dpkg/buildflags.mk
 
-CFLAGS+=-Wl,--as-needed,-z,relro,-z,now -Wdate-time
+export CFLAGS+=-Wl,--as-needed,-z,relro,-z,now -Wdate-time
+export LC_ALL=C
 
 %:
 	dh $@
