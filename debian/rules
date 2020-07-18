@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+DPKG_EXPORT_BUILDFLAGS = 1
+
+include /usr/share/dpkg/buildflags.mk
+
+CFLAGS+=-Wl,--as-needed,-z,relro,-z,now -Wdate-time
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	dh_auto_install
+
+override_dh_auto_test:

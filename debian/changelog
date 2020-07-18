@@ -1,0 +1,5 @@
+procdump (1.1.1-1) unstable; urgency=medium
+
+  * Initial release (Closes: #965243)
+
+ -- Anuradha Weeraman <anuradha@debian.org>  Fri, 17 Jul 2020 23:39:40 -0400
