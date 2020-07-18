@@ -11,6 +11,7 @@ Vcs-Git: https://salsa.debian.org/anuradha/procdump.git
 
 Package: procdump
 Architecture: any
+Suggests: gdb
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Utility to create core dumps based on performance triggers
  ProcDump provides a convenient way for Linux developers to create core
