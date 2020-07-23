@@ -5,7 +5,9 @@ DPKG_EXPORT_BUILDFLAGS=1
 
 include /usr/share/dpkg/buildflags.mk
 
-export CFLAGS+=$(shell dpkg-buildflags --get CFLAGS)
+# GCC10 defaults to -fno-common.
+# # Resolving FTBFS with -fcommon: https://gcc.gnu.org/gcc-10/porting_to.html
+export CFLAGS+=$(shell dpkg-buildflags --get CFLAGS) -fcommon
 export CFLAGS+=$(shell dpkg-buildflags --get CPPFLAGS)
 export CFLAGS+=$(shell dpkg-buildflags --get LDFLAGS)
 export LC_ALL=C
