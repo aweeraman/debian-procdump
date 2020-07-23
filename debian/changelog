@@ -1,6 +1,7 @@
-procdump (1.1.1-2) UNRELEASED; urgency=medium
+procdump (1.1.1-2) unstable; urgency=medium
 
   * Updated Vcs-* fields after moving to Debian group on Salsa
+  * Reproducibility improvements
 
  -- Anuradha Weeraman <anuradha@debian.org>  Wed, 22 Jul 2020 13:49:43 -0400
 
