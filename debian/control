@@ -10,7 +10,7 @@ Vcs-Browser: https://salsa.debian.org/debian/procdump
 Vcs-Git: https://salsa.debian.org/debian/procdump.git
 
 Package: procdump
-Architecture: any
+Architecture: linux-any
 Suggests: gdb
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Utility to create core dumps based on performance triggers
