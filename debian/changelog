@@ -1,6 +1,7 @@
 procdump (1.1.1-4) unstable; urgency=medium
 
   * Bumped up standards version
+  * Forwarded patches upstream, lintian fix
 
  -- Anuradha Weeraman <anuradha@debian.org>  Wed, 09 Dec 2020 17:19:29 -0500
 

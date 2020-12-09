@@ -1,6 +1,7 @@
 Description: Improvements to the upstream man page
 Author: Anuradha Weeraman <anuradha@debian.org>
 Last-Update: 2020-07-18
+Forwarded: yes
 
 --- a/procdump.1
 +++ b/procdump.1

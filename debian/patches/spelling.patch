@@ -1,6 +1,7 @@
 Description: Spelling fixes
 Author: Anuradha Weeraman <anuradha@debian.org>
 Last-Update: 2020-07-18
+Forwarded: yes
 
 --- a/src/CoreDumpWriter.c
 +++ b/src/CoreDumpWriter.c
@@ -18,7 +19,7 @@ Last-Update: 2020-07-18
          
          if(commandPipe == NULL){
 -            Log(error, "An error occured while generating the core dump");      
-+            Log(error, "An error occurred while generating the core dump");      
++            Log(error, "An error occurred while generating the core dump");
              Trace("WriteCoreDumpInternal: Failed to open pipe to gcore");
              exit(1);
          }
