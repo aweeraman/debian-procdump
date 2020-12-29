@@ -2,7 +2,7 @@ Source: procdump
 Section: utils
 Priority: optional
 Maintainer: Anuradha Weeraman <anuradha@debian.org>
-Build-Depends: debhelper-compat (= 12), zlib1g-dev
+Build-Depends: debhelper-compat (= 13), zlib1g-dev
 Standards-Version: 4.5.1
 Homepage: https://github.com/microsoft/ProcDump-for-Linux
 Rules-Requires-Root: no

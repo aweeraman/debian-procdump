@@ -3,6 +3,9 @@ procdump (1.1.1-5) unstable; urgency=medium
   [ Helmut Grohne ]
   * Fix FTCBFS: Drop override_dh_auto_{build,install}. (Closes: #977480)
 
+  [ Anuradha Weeraman]
+  * Bumped up debhelper-compat version
+
  -- Anuradha Weeraman <anuradha@debian.org>  Tue, 29 Dec 2020 17:07:56 +0530
 
 procdump (1.1.1-4) unstable; urgency=medium
