@@ -15,10 +15,4 @@ export LC_ALL=C
 %:
 	dh $@
 
-override_dh_auto_build:
-	$(MAKE) all
-
-override_dh_auto_install:
-	dh_auto_install
-
 override_dh_auto_test:
