@@ -5,6 +5,7 @@ procdump (1.1.1-5) unstable; urgency=medium
 
   [ Anuradha Weeraman]
   * Bumped up debhelper-compat version
+  * Lintian fix for hardening-no-bindnow
 
  -- Anuradha Weeraman <anuradha@debian.org>  Tue, 29 Dec 2020 17:07:56 +0530
 
