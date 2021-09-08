@@ -1,4 +1,4 @@
-procdump (1.1.1-6) unstable; urgency=medium
+procdump (1.1.1-6) unstable; urgency=high
 
   * Bumped up Standards Version
   * Added autopkgtest
