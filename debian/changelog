@@ -1,6 +1,7 @@
 procdump (1.1.1-6) unstable; urgency=medium
 
   * Bumped up Standards Version
+  * Added autopkgtest
 
  -- Anuradha Weeraman <anuradha@debian.org>  Wed, 08 Sep 2021 21:38:00 +0530
 
