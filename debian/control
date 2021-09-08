@@ -3,7 +3,7 @@ Section: utils
 Priority: optional
 Maintainer: Anuradha Weeraman <anuradha@debian.org>
 Build-Depends: debhelper-compat (= 13), zlib1g-dev
-Standards-Version: 4.5.1
+Standards-Version: 4.6.0
 Homepage: https://github.com/microsoft/ProcDump-for-Linux
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/debian/procdump
