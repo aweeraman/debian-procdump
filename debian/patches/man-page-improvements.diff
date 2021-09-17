@@ -5,10 +5,10 @@ Forwarded: yes
 
 --- a/procdump.1
 +++ b/procdump.1
-@@ -1,22 +1,72 @@
+@@ -1,23 +1,76 @@
  .\" Manpage for procdump.
--.TH man 8 "12/09/2019" "1.1.1" "procdump manpage"
-+.TH PROCDUMP 1 "12/09/2019" "PROCDUMP" "General Commands Manual"
+-.TH man 8 "04/03/2020" "1.2" "procdump manpage"
++.TH PROCDUMP 8 "04/03/2020" "PROCDUMP" "procdump"
  .SH NAME
 -procdump \- generate coredumps based off performance triggers.
 +procdump \- generate core dumps based off performance triggers
@@ -24,6 +24,7 @@ Forwarded: yes
 -      -I          Polling frequency in milliseconds (default is 1000)
 -      -n          Number of core dumps to write before exiting (default is 1)
 -      -s          Consecutive seconds before dump is written (default is 10)
+-      -o          Path and/or filename prefix where the core dump is written to
 -      -d          Writes diagnostic logs to syslog
 -  TARGET must be exactly one of these:
 -      -p   pid of the process
@@ -78,6 +79,10 @@ Forwarded: yes
 +.B
 +\-s
 +Consecutive seconds before dump is written (default is 10)
++.TP
++.B
++\-o
++Path and/or filename prefix where the core dump is written to
 +.TP
 +.B
 +\-d

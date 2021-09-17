@@ -1,6 +1,7 @@
 procdump (1.2-1) unstable; urgency=high
 
   * New upstream release
+  * Updated debian patches
 
  -- Anuradha Weeraman <anuradha@debian.org>  Fri, 17 Sep 2021 23:12:05 +0530
 
