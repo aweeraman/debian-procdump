@@ -14,15 +14,21 @@ struct Handle g_evtConfigurationInitialized = HANDLE_MANUAL_RESET_EVENT_INITIALI
 
 static sigset_t sig_set;
 static pthread_t sig_thread_id;
+static pthread_t sig_monitor_thread_id;
+extern pthread_mutex_t LoggerLock;
+long HZ;                                // clock ticks per second
+int MAXIMUM_CPU;                        // maximum cpu usage percentage (# cores * 100)
+struct ProcDumpConfiguration g_config;  // backbone of the program
+pthread_mutex_t ptrace_mutex;
 
 //--------------------------------------------------------------------
 //
-// SignalThread - Thread for hanlding graceful Async signals (e.g., SIGINT, SIGTERM)
+// SignalThread - Thread for handling graceful Async signals (e.g., SIGINT, SIGTERM)
 //
 //--------------------------------------------------------------------
 void *SignalThread(void *input)
 {
-    struct ProcDumpConfiguration *self = (struct ProcDumpConfiguration *)input;
+    struct ProcDumpConfiguration *config = (struct ProcDumpConfiguration *)input;
     int sig_caught, rc;
 
     if ((rc = sigwait(&sig_set, &sig_caught)) != 0) {
@@ -33,13 +39,31 @@ void *SignalThread(void *input)
     switch (sig_caught)
     {
     case SIGINT:
-        SetQuit(self, 1);
-        if(self->gcorePid != NO_PID) {
+        SetQuit(config, 1);
+        if(config->gcorePid != NO_PID) {
             Log(info, "Shutting down gcore");
-            if((rc = kill(-self->gcorePid, SIGKILL)) != 0) {            // pass negative PID to kill entire PGRP with value of gcore PID
+            if((rc = kill(-config->gcorePid, SIGKILL)) != 0) {            // pass negative PID to kill entire PGRP with value of gcore PID
                 Log(error, "Failed to shutdown gcore.");
             }
         }
+
+        // Need to make sure we detach from ptrace (if not attached it will silently fail)
+        // To avoid situations where we have intercepted a signal and CTRL-C is hit, we synchronize
+        // access to the signal path (in SignalMonitoringThread). Note, there is still a race but
+        // acceptable since it is very unlikely to occur. We also cancel the SignalMonitorThread to
+        // break it out of waitpid call. 
+        if(config->SignalNumber != -1)
+        {
+            pthread_mutex_lock(&ptrace_mutex);
+            ptrace(PTRACE_DETACH, config->ProcessId, 0, 0);
+            pthread_mutex_unlock(&ptrace_mutex);
+
+            if ((rc = pthread_cancel(sig_monitor_thread_id)) != 0) {
+                Log(error, "An error occurred while canceling SignalMonitorThread.\n");
+                exit(-1);
+            }
+        }
+
         Log(info, "Quit");
         break;
     default:
@@ -65,6 +89,7 @@ void InitProcDump()
     }
     InitProcDumpConfiguration(&g_config);
     pthread_mutex_init(&LoggerLock, NULL);
+    pthread_mutex_init(&ptrace_mutex, NULL);
 }
 
 //--------------------------------------------------------------------
@@ -124,6 +149,7 @@ void InitProcDumpConfiguration(struct ProcDumpConfiguration *self)
     self->MemoryThreshold =             -1;
     self->ThreadThreshold =             -1;
     self->FileDescriptorThreshold =     -1;
+    self->SignalNumber =                -1;
     self->ThresholdSeconds =            DEFAULT_DELTA_TIME;
     self->bCpuTriggerBelowValue =       false;
     self->bMemoryTriggerBelowValue =    false;
@@ -132,6 +158,8 @@ void InitProcDumpConfiguration(struct ProcDumpConfiguration *self)
     self->DiagnosticsLoggingEnabled =   false;
     self->gcorePid =                    NO_PID;
     self->PollingInterval =             MIN_POLLING_INTERVAL;
+    self->CoreDumpPath =                NULL;
+    self->CoreDumpName =                NULL;
 
     SetEvent(&g_evtConfigurationInitialized.event); // We've initialized and are now re-entrant safe
 }
@@ -157,6 +185,9 @@ void FreeProcDumpConfiguration(struct ProcDumpConfiguration *self)
         // The string constant is not on the heap.
         free(self->ProcessName);
     }
+
+    free(self->CoreDumpPath);
+    free(self->CoreDumpName);
 }
 
 //--------------------------------------------------------------------
@@ -180,7 +211,7 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
     // parse arguments
 	int next_option;
     int option_index = 0;
-    const char* short_options = "+p:C:c:M:m:n:s:w:T:F:I:dh";
+    const char* short_options = "+p:C:c:M:m:n:s:w:T:F:G:I:o:dh";
     const struct option long_options[] = {
     	{ "pid",                       required_argument,  NULL,           'p' },
     	{ "cpu",                       required_argument,  NULL,           'C' },
@@ -190,12 +221,18 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         { "number-of-dumps",           required_argument,  NULL,           'n' },
         { "time-between-dumps",        required_argument,  NULL,           's' },
         { "wait",                      required_argument,  NULL,           'w' },
-        { "threads",                   required_argument,  NULL,           'T' },        
-        { "filedescriptors",           required_argument,  NULL,           'F' },                
+        { "threads",                   required_argument,  NULL,           'T' },
+        { "filedescriptors",           required_argument,  NULL,           'F' },
+        { "signal",                    required_argument,  NULL,           'G' },
         { "pollinginterval",           required_argument,  NULL,           'I' },                        
+        { "output-path",               required_argument,  NULL,           'o' },
         { "diag",                      no_argument,        NULL,           'd' },
-        { "help",                      no_argument,        NULL,           'h' }
+        { "help",                      no_argument,        NULL,           'h' },
+        { NULL,                        0,                  NULL,            0  }
     };
+
+    char *tempOutputPath = NULL;
+    struct stat statbuf;
 
     // start parsing command line arguments
     while ((next_option = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1) {
@@ -238,6 +275,14 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
                     return PrintUsage(self);
                 }
                 break;
+
+            case 'G':
+                if (self->SignalNumber != -1 || !IsValidNumberArg(optarg) ||
+                    (self->SignalNumber = atoi(optarg)) < 0 ) {
+                    Log(error, "Invalid signal specified.");
+                    return PrintUsage(self);
+                }
+                break;                
 
             case 'c':
                 if (self->CpuThreshold != -1 || !IsValidNumberArg(optarg) ||
@@ -288,10 +333,36 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
                 self->ProcessName = strdup(optarg);
                 break;
 
+            case 'o':
+                tempOutputPath = strdup(optarg);
+
+                // Check if the user provided an existing directory or a path
+                // ending in a '/'. In this case, use the default naming
+                // convention but place the files in the given directory.
+                if ((stat(tempOutputPath, &statbuf) == 0 && S_ISDIR(statbuf.st_mode)) ||
+                        tempOutputPath[strlen(tempOutputPath)-1] == '/') {
+                    self->CoreDumpPath = tempOutputPath;
+                    self->CoreDumpName = NULL;
+                } else {
+                    self->CoreDumpPath = strdup(dirname(tempOutputPath));
+                    free(tempOutputPath);
+                    tempOutputPath = strdup(optarg);
+                    self->CoreDumpName = strdup(basename(tempOutputPath));
+                    free(tempOutputPath);
+                }
+
+                // Check if the path portion of the output format is valid
+                if (stat(self->CoreDumpPath, &statbuf) < 0 || !S_ISDIR(statbuf.st_mode)) {
+                    Log(error, "Invalid directory (\"%s\") provided for core dump output.",
+                        self->CoreDumpPath);
+                    return PrintUsage(self);
+                }
+                break;
+
             case 'd':
                 self->DiagnosticsLoggingEnabled = true;
                 break;
-                
+
             case 'h':
                 return PrintUsage(self);
 
@@ -301,8 +372,12 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         }
     }
 
-    // Check for multi-arg situations
+    // If no path was provided, assume the current directory
+    if (self->CoreDumpPath == NULL) {
+        self->CoreDumpPath = strdup(".");
+    }
 
+    // Check for multi-arg situations
     // if number of dumps is set, but no thresholds, just go on timer
     if (self->NumberOfDumpsToCollect != -1 &&
         self->MemoryThreshold == -1 &&
@@ -311,6 +386,31 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         self->FileDescriptorThreshold == -1) {
             self->bTimerThreshold = true;
         }
+
+
+    // If signal dump is specified, it can be the only trigger that is used.
+    // Otherwise we might run into a situation where the other triggers invoke
+    // gcore while the target is being ptraced due to signal trigger.
+    // Interval has no meaning during signal monitoring.
+    // 
+    if(self->SignalNumber != -1) 
+    {
+        if(self->CpuThreshold != -1 || self->ThreadThreshold != -1 || self->FileDescriptorThreshold != -1 || self->MemoryThreshold != -1)
+        {
+            Log(error, "Signal trigger must be the only trigger specified.");
+            return PrintUsage(self);            
+        }
+        if(self->PollingInterval != MIN_POLLING_INTERVAL)
+        {
+            Log(error, "Polling interval has no meaning during signal monitoring.");
+            return PrintUsage(self);            
+        }
+
+        // Again, we cant have another trigger (in this case timer) kicking off another dump generation since we will already
+        // be attached via ptrace. 
+        self->bTimerThreshold = false;
+    }
+
 
     if(self->ProcessId == NO_PID && !self->WaitingForProcessName){
         Log(error, "A valid PID or process name must be specified");
@@ -544,6 +644,13 @@ int CreateTriggerThreads(struct ProcDumpConfiguration *self)
         }
     }
 
+    if (self->SignalNumber != -1) {
+        if ((rc = pthread_create(&sig_monitor_thread_id, NULL, SignalMonitoringThread, (void *)self)) != 0) {
+            Trace("CreateTriggerThreads: failed to create SignalMonitoringThread.");            
+            return rc;
+        }
+    }
+
     if (self->bTimerThreshold) {
         if ((rc = pthread_create(&self->Threads[self->nThreads++], NULL, TimerThread, (void *)self)) != 0) {
             Trace("CreateTriggerThreads: failed to create TimerThread.");
@@ -631,20 +738,38 @@ int WaitForQuitOrEvent(struct ProcDumpConfiguration *self, struct Handle *handle
 int WaitForAllThreadsToTerminate(struct ProcDumpConfiguration *self)
 {
     int rc = 0;
-    for (int i = 0; i < self->nThreads; i++) {
-        if ((rc = pthread_join(self->Threads[i], NULL)) != 0) {
-            Log(error, "An error occured while joining threads\n");
+
+
+    // Wait for the signal monitoring thread if there is one. If there is one, it will be the only
+    // one. 
+    if(self->SignalNumber != -1)
+    {
+        if ((rc = pthread_join(sig_monitor_thread_id, NULL)) != 0) {
+            Log(error, "An error occurred while joining SignalMonitorThread.\n");
             exit(-1);
         }
     }
-    if ((rc = pthread_cancel(sig_thread_id)) != 0) {
-        Log(error, "An error occured while canceling SignalThread.\n");
-        exit(-1);
+    else
+    {
+        // Wait for the other monitoring threads
+        for (int i = 0; i < self->nThreads; i++) {
+            if ((rc = pthread_join(self->Threads[i], NULL)) != 0) {
+                Log(error, "An error occurred while joining threads\n");
+                exit(-1);
+            }
+        }
     }
+
+    // Cancel the signal handling thread. 
+    // We dont care about the return since the signal thread might already be gone. 
+    pthread_cancel(sig_thread_id);
+
+    // Wait for signal handling thread to complete
     if ((rc = pthread_join(sig_thread_id, NULL)) != 0) {
-        Log(error, "An error occured while joining SignalThread.\n");
+        Log(error, "An error occurred while joining SignalThread.\n");
         exit(-1);
     }
+
     return rc;
 }
 
@@ -681,6 +806,10 @@ int SetQuit(struct ProcDumpConfiguration *self, int quit)
 bool PrintConfiguration(struct ProcDumpConfiguration *self)
 {
     if (WaitForSingleObject(&self->evtConfigurationPrinted,0) == WAIT_TIMEOUT) {
+        if(self->SignalNumber != -1)
+        {
+            printf("** NOTE ** Signal triggers use PTRACE which will impact the performance of the target process\n\n");
+        }
         printf("Process:\t\t%s", self->ProcessName);
         if (!self->WaitingForProcessName) {
             printf(" (%d)", self->ProcessId);
@@ -715,11 +844,25 @@ bool PrintConfiguration(struct ProcDumpConfiguration *self)
         if (self->ThreadThreshold != -1) {
             printf("Thread Threshold:\t>=%d\n", self->ThreadThreshold);
         }
+        else {
+            printf("Thread Threshold:\t\tn/a\n");
+        }
 
         // File descriptor
         if (self->FileDescriptorThreshold != -1) {
             printf("File descriptor Threshold:\t>=%d\n", self->FileDescriptorThreshold);
         }
+        else {
+            printf("File descriptor Threshold:\t\tn/a\n");
+        }
+
+        // Signal
+        if (self->SignalNumber != -1) {
+            printf("Signal number:\t%d\n", self->SignalNumber);
+        }
+        else {
+            printf("Signal:\t\tn/a\n");
+        }        
 
         // Polling inverval
         printf("Polling interval (ms):\t%d\n", self->PollingInterval);
@@ -729,6 +872,12 @@ bool PrintConfiguration(struct ProcDumpConfiguration *self)
 
         // number of dumps and others
         printf("Number of Dumps:\t%d\n", self->NumberOfDumpsToCollect);
+
+        // Output directory and filename
+        printf("Output directory for core dumps:\t%s\n", self->CoreDumpPath);
+        if (self->CoreDumpName != NULL) {
+            printf("Custom name for core dumps:\t%s_<counter>.<pid>\n", self->CoreDumpName);
+        }
 
         SetEvent(&self->evtConfigurationPrinted.event);
         return true;
@@ -833,11 +982,11 @@ bool CheckKernelVersion()
 //--------------------------------------------------------------------
 void PrintBanner()
 {
-    printf("\nProcDump v1.1.1 - Sysinternals process dump utility\n");
-    printf("Copyright (C) 2019 Microsoft Corporation. All rights reserved. Licensed under the MIT license.\n");
+    printf("\nProcDump v1.2 - Sysinternals process dump utility\n");
+    printf("Copyright (C) 2020 Microsoft Corporation. All rights reserved. Licensed under the MIT license.\n");
     printf("Mark Russinovich, Mario Hewardt, John Salem, Javid Habibi\n");
 
-    printf("Monitors a process and writes a dump file when the process exceeds the\n");
+    printf("Monitors a process and writes a dump file when the process meets the\n");
     printf("specified criteria.\n\n");
 }
 
@@ -857,10 +1006,12 @@ int PrintUsage(struct ProcDumpConfiguration *self)
     printf("      -M          Trigger core dump generation when memory commit exceeds or equals specified value (MB)\n");
     printf("      -m          Trigger core dump generation when when memory commit is less than specified value (MB)\n");
     printf("      -T          Trigger when thread count exceeds or equals specified value.\n");
-    printf("      -F          Trigger when filedescriptor count exceeds or equals specified value.\n");    
+    printf("      -F          Trigger when file descriptor count exceeds or equals specified value.\n");  
+    printf("      -G          Trigger when signal with the specified value (num) is sent (uses PTRACE and will affect performance of target process).\n");  
     printf("      -I          Polling frequency in milliseconds (default is %d)\n", MIN_POLLING_INTERVAL);        
     printf("      -n          Number of core dumps to write before exiting (default is %d)\n", DEFAULT_NUMBER_OF_DUMPS);
     printf("      -s          Consecutive seconds before dump is written (default is %d)\n", DEFAULT_DELTA_TIME);
+    printf("      -o          Path and/or filename prefix where the core dump is written to\n");
     printf("      -d          Writes diagnostic logs to syslog\n");
     printf("   TARGET must be exactly one of these:\n");
     printf("      -p          pid of the process\n");

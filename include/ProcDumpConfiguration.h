@@ -25,6 +25,10 @@
 #include <limits.h>
 #include <dirent.h>
 #include <errno.h>
+#include <libgen.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "Handle.h"
 #include "TriggerThreadProcs.h"
@@ -39,11 +43,6 @@
 #define MIN_KERNEL_PATCH 5
 
 #define MIN_POLLING_INTERVAL 1000   // default trigger polling interval (ms)
-
-struct ProcDumpConfiguration g_config;  // backbone of the program
-
-long HZ;                                // clock ticks per second
-int MAXIMUM_CPU;                        // maximum cpu usage percentage (# cores * 100)
 
 // -------------------
 // Structs
@@ -82,7 +81,10 @@ struct ProcDumpConfiguration {
     bool DiagnosticsLoggingEnabled; // -d
     int ThreadThreshold;            // -T
     int FileDescriptorThreshold;    // -F
+    int SignalNumber;               // -G    
     int PollingInterval;            // -I
+    char *CoreDumpPath;             // -o
+    char *CoreDumpName;             // -o
 
     // multithreading
     // set max number of concurrent dumps on init (default to 1)

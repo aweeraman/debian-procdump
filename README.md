@@ -1,4 +1,4 @@
-# ProcDump [![Build Status](https://oss-sysinternals.visualstudio.com/Procdump%20for%20Linux/_apis/build/status/microsoft.ProcDump-for-Linux?branchName=master)](https://oss-sysinternals.visualstudio.com/Procdump%20for%20Linux/_build/latest?definitionId=10&branchName=master)
+# ProcDump [![Build Status](https://oss-sysinternals.visualstudio.com/Procdump%20for%20Linux/_apis/build/status/Sysinternals.ProcDump-for-Linux?branchName=master)](https://oss-sysinternals.visualstudio.com/Procdump%20for%20Linux/_build/latest?definitionId=21&branchName=master)
 ProcDump is a Linux reimagining of the classic ProcDump tool from the Sysinternals suite of tools for Windows.  ProcDump provides a convenient way for Linux developers to create core dumps of their application based on performance triggers.
 
 ![ProcDump in use](procdump.gif "Procdump in use")
@@ -8,13 +8,13 @@ ProcDump is a Linux reimagining of the classic ProcDump tool from the Sysinterna
 ## Requirements
 * Minimum OS:
   * Red Hat Enterprise Linux / CentOS 7
-  * Fedora 26
-  * Ubuntu 14.04 LTS
+  * Fedora 29
+  * Ubuntu 16.04 LTS
 * `gdb` >= 7.6.1
 * `zlib` (build-time only)
 
 ## Install ProcDump
-Checkout our [install instructions](INSTALL.md) for ditribution specific steps to install Procdump.
+Checkout our [install instructions](INSTALL.md) for distribution specific steps to install Procdump.
 
 ## Build ProcDump from Scratch
 To build from scratch you'll need to have a C compiler (supporting C11), `zlib`, and a `make` utility installed. Then simply run: 
@@ -47,10 +47,12 @@ Usage: procdump [OPTIONS...] TARGET
       -M          Trigger core dump generation when memory commit exceeds or equals specified value (MB)
       -m          Trigger core dump generation when when memory commit is less than specified value (MB)
       -T          Trigger when thread count exceeds or equals specified value.
-      -F          Trigger when filedescriptor count exceeds or equals specified value.
+      -F          Trigger when file descriptor count exceeds or equals specified value.
+      -G          Trigger when signal with the specified value (numeric) is sent (uses PTRACE and will affect performance of target process).      
       -I          Polling frequency in milliseconds (default is 1000)
       -n          Number of core dumps to write before exiting (default is 1)
       -s          Consecutive seconds before dump is written (default is 10)
+      -o          Path and/or filename prefix where the core dump is written to
       -d          Writes diagnostic logs to syslog
    TARGET must be exactly one of these:
       -p          pid of the process
@@ -87,7 +89,18 @@ The following will create a core dump when CPU usage is >= 65% or memory usage i
 ```
 sudo procdump -C 65 -M 100 -p 1234
 ```
-
+The following will create a core dump in the `/tmp` directory immediately.
+```
+sudo procdump -o /tmp -p 1234
+```
+The following will create a core dump in the current directory with the name dump_0.1234. If -n is used, the files will be named dump_0.1234, dump_1.1234 and so on.
+```
+sudo procdump -o dump -p 1234
+```
+The following will create a core dump when a SIGSEGV occurs.
+```
+sudo procdump -G 11 -p 1234
+```
 > All options can also be used with -w instead of -p. -w will wait for a process with the given name.
 
 The following waits for a process named `my_application` and creates a core dump immediately when it is found.
