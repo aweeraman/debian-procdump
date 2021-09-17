@@ -1,2 +1,3 @@
 version=4
-https://github.com/microsoft/ProcDump-for-Linux/tags .*/?(\d\.\d.\d)\.tar\.gz
+opts="filenamemangle=s/.+\/v?(\d\S+)\.tar\.gz/procdump_$1\.tar\.gz/" \
+  https://github.com/Sysinternals/ProcDump-for-Linux/tags .*/v?(\d\S+)\.tar\.gz
