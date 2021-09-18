@@ -1,3 +1,9 @@
+procdump (1.2-2) unstable; urgency=high
+
+  * Fix FTBFS with parallel builds (Closes: #994586)
+
+ -- Anuradha Weeraman <anuradha@debian.org>  Sat, 18 Sep 2021 13:12:11 +0530
+
 procdump (1.2-1) unstable; urgency=high
 
   * New upstream release

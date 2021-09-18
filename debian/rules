@@ -13,6 +13,6 @@ export CFLAGS+=$(shell dpkg-buildflags --get LDFLAGS)
 export LC_ALL=C
 
 %:
-	dh $@
+	dh $@ --no-parallel
 
 override_dh_auto_test:
