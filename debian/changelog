@@ -1,3 +1,9 @@
+procdump (1.2-3) unstable; urgency=medium
+
+  * Bumped up standards version.
+
+ -- Anuradha Weeraman <anuradha@debian.org>  Sat, 10 Sep 2022 14:20:51 +0530
+
 procdump (1.2-2) unstable; urgency=high
 
   * Fix FTBFS with parallel builds (Closes: #994586)
