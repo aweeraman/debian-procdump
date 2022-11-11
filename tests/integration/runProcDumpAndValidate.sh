@@ -8,10 +8,11 @@ function runProcDumpAndValidate {
 
 	dumpParam=""
 	if [ "$#" -ge "6" -a -n "$6" ]; then
-		dumpParam="-o $dumpDir/$6"
+		dumpParam="$dumpDir/$6"
 	fi
 
 	if [ -z "$TESTPROGNAME" ]; then
+  	    echo [`date +"%T.%3N"`] Starting stress-ng
 		if [ "$5" == "MEM" ]; then
 			stress-ng --vm 1 --vm-hang 0 --vm-bytes $1 --timeout 20s -q&
 		else
@@ -20,7 +21,9 @@ function runProcDumpAndValidate {
 		pid=$!
 		echo "PID: $pid"
 
-		sleep 1s
+	    # Give test app opportunity to start and get into scenario state
+		sleep 5s
+		echo [`date +"%T.%3N"`] Done waiting for stress-ng to start
 
 		childrenpid=$(pidof -o $pid $(which stress-ng))
 			echo "ChildrenPID: $childrenpid"
@@ -28,16 +31,42 @@ function runProcDumpAndValidate {
 		childpid=$(echo $childrenpid | cut -d " " -f1)
 		echo "ChildPID: $childpid"
 
-		echo "$PROCDUMPPATH $2 $3 $dumpParam -p $childpid"
-		$PROCDUMPPATH $2 $3 $dumpParam -p $childpid
+		# We launch procdump in background and wait for 10 secs to complete the monitoring
+		echo "$PROCDUMPPATH $2 $3 $childpid $dumpParam "
+		echo [`date +"%T.%3N"`] Starting ProcDump
+		$PROCDUMPPATH $2 $3 $childpid $dumpParam&
+		pidPD=$!
+		echo "ProcDump PID: $pidPD"
+		sleep 10s
+		echo [`date +"%T.%3N"`] Killing ProcDump
+	    if ps -p $pidPD > /dev/null
+	    then
+		    kill $pidPD
+	    fi
 	else
+		echo [`date +"%T.%3N"`] Starting $TESTPROGNAME
 		TESTPROGPATH=$(readlink -m "$DIR/../../bin/$TESTPROGNAME");
-		(sleep 2; $TESTPROGPATH "$TESTPROGMODE") &
+		($TESTPROGPATH "$TESTPROGMODE") &
 		pid=$!
+		echo "Test App: $TESTPROGPATH $TESTPROGMODE"
 		echo "PID: $pid"
 
-		echo "$PROCDUMPPATH $2 $3 $dumpParam -w $TESTPROGNAME"
-		$PROCDUMPPATH $2 $3 $dumpParam -w "$TESTPROGNAME"
+	    # Give test app opportunity to start and get into scenario state
+		sleep 5s
+		echo [`date +"%T.%3N"`] Done waiting for $TESTPROGNAME to start
+
+		# We launch procdump in background and wait for 10 secs to complete the monitoring
+		echo "$PROCDUMPPATH $2 $3 $dumpParam $TESTPROGNAME"
+		echo [`date +"%T.%3N"`] Starting ProcDump
+		$PROCDUMPPATH $2 $3 $dumpParam "$TESTPROGNAME"&
+		pidPD=$!
+		echo "ProcDump PID: $pidPD"
+		sleep 10s
+		echo [`date +"%T.%3N"`] Killing ProcDump
+	    if ps -p $pidPD > /dev/null
+	    then
+		    kill $pidPD
+	    fi
 	fi
 
 	if ps -p $pid > /dev/null
