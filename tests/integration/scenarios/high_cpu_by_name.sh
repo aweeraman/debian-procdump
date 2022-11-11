@@ -7,7 +7,7 @@ TESTPROGNAME="ProcDumpTestApplication"
 TESTPROGMODE="burn"
 
 stressPercentage=90
-procDumpType="-C"
+procDumpType="-c"
 procDumpTrigger=50
 shouldDump=true
 
