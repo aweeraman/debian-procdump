@@ -8,7 +8,7 @@ Forwarded: yes
 @@ -1,41 +1,105 @@
  .\" Manpage for procdump.
 -.TH man 8 "12/12/2022" "1.4" "procdump manpage"
-+.TH PROCDUMP 8 "1/28/2023" "procdump" "System Management Commands"
++.TH PROCDUMP 1 "1/28/2023" "procdump" "User Commands"
  .SH NAME
 -procdump \- generate coredumps based off performance triggers.
 +procdump \- generate coredumps based on performance triggers.
