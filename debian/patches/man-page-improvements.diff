@@ -129,7 +129,7 @@ Forwarded: yes
 +[.NET] Create dump when the process encounters an exception.
 +.TP
 +.B -f
-+[.NET] Filter (include) on the (comma seperated) exception name(s).
++[.NET] Filter (include) on the (comma separated) exception name(s).
 +.TP
 +.B -pf
 +Polling frequency.
