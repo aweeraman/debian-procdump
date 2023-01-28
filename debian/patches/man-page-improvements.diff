@@ -1,103 +1,149 @@
 Description: Improvements to the upstream man page
 Author: Anuradha Weeraman <anuradha@debian.org>
-Last-Update: 2020-07-18
+Last-Update: 2023-01-28
 Forwarded: yes
 
 --- a/procdump.1
 +++ b/procdump.1
-@@ -1,23 +1,76 @@
+@@ -1,41 +1,105 @@
  .\" Manpage for procdump.
--.TH man 8 "04/03/2020" "1.2" "procdump manpage"
-+.TH PROCDUMP 1 "04/03/2020" "PROCDUMP" "procdump"
+-.TH man 8 "12/12/2022" "1.4" "procdump manpage"
++.TH PROCDUMP 8 "1/28/2023" "procdump" "System Management Commands"
  .SH NAME
 -procdump \- generate coredumps based off performance triggers.
-+procdump \- generate core dumps based off performance triggers
++procdump \- generate coredumps based on performance triggers.
  .SH SYNOPSIS
--procdump [OPTIONS...] TARGET
--      -h          Prints this help screen
--      -C          Trigger core dump generation when CPU exceeds or equals specified value (0 to 100 * nCPU)
--      -c          Trigger core dump generation when CPU is less than specified value (0 to 100 * nCPU)
--      -M          Trigger core dump generation when memory commit exceeds or equals specified value (MB)
--      -m          Trigger core dump generation when when memory commit is less than specified value (MB)
--      -T          Trigger when thread count exceeds or equals specified value.
--      -F          Trigger when filedescriptor count exceeds or equals specified value.
--      -I          Polling frequency in milliseconds (default is 1000)
--      -n          Number of core dumps to write before exiting (default is 1)
--      -s          Consecutive seconds before dump is written (default is 10)
--      -o          Path and/or filename prefix where the core dump is written to
--      -d          Writes diagnostic logs to syslog
--  TARGET must be exactly one of these:
--      -p   pid of the process
--      -w   Name of the process executable
-+.B
-+procdump
-+[OPTIONS...] TARGET
- .SH DESCRIPTION
--procdump is a Linux reimagining of the class ProcDump tool from the Sysinternals suite of tools for Windows. Procdump provides a convenient way for Linux developers to create core dumps of their application based on performance triggers.
+-procdump [-n Count]
+-        [-s Seconds]
+-        [-c|-cl CPU_Usage]
+-        [-m|-ml Commit_Usage]
+-        [-tc Thread_Threshold]
+-        [-fc FileDescriptor_Threshold]
+-        [-sig Signal_Number]
+-        [-e]
+-        [-f Include_Filter,...]
+-        [-pf Polling_Frequency]
+-        [-o]
+-        [-log]
+-        {
+-            {{[-w] Process_Name | [-pgid] PID} [Dump_File | Dump_Folder]}
+-        }
+-
+-Options:
+-   -n      Number of dumps to write before exiting.
+-   -s      Consecutive seconds before dump is written (default is 10).
+-   -c      CPU threshold above which to create a dump of the process.
+-   -cl     CPU threshold below which to create a dump of the process.
+-   -m      Memory commit threshold in MB at which to create a dump.
+-   -ml     Trigger when memory commit drops below specified MB value.
+-   -tc     Thread count threshold above which to create a dump of the process.
+-   -fc     File descriptor count threshold above which to create a dump of the process.
+-   -sig    Signal number to intercept to create a dump of the process.
+-   -e      [.NET] Create dump when the process encounters an exception.
+-   -f      [.NET] Filter (include) on the (comma seperated) exception name(s).
+-   -pf     Polling frequency.
+-   -o      Overwrite existing dump file.
+-   -log    Writes extended ProcDump tracing to syslog.
+-   -w      Wait for the specified process to launch if it's not running.
+-   -pgid   Process ID specified refers to a process group ID.
+-
 +.B procdump
-+is a Linux reimagining of the class ProcDump tool from the Sysinternals suite of tools for Windows. Procdump provides a convenient way for Linux developers to create core dumps of their application based on performance triggers.
++[
++.B -n
++.I count
++] [
++.B -s
++.I seconds
++] [
++.B -c|-cl
++.I CPU usage
++] [
++.B -m|-ml
++.I usage
++] [
++.B -tc
++.I threshold
++] [
++.B -fc
++.I threshold
++] [
++.B -sig
++.I number
++] [
++.B -e
++] [
++.B -f
++.I filter,...
++] [
++.B -pf
++.I frequency
++] [
++.B -o
++] [
++.B -log
++] [[ [
++.B -w
++.I name
++]
++| [
++.B -pgid
++.I pid
++]
++] [
++.I file
++|
++.I folder
++]]
+ .SH DESCRIPTION
+ procdump is a Linux reimagining of the class ProcDump tool from the Sysinternals suite of tools for Windows. Procdump provides a convenient way for Linux developers to create core dumps of their application based on performance triggers.
 +.SH OPTIONS
-+.BR
-+.PD 0
 +.TP
-+.B
-+\-h
-+Displays a summary of the command-line usage of procdump
++.B -n
++Number of dumps to write before exiting.
 +.TP
-+.B
-+\-C
-+Trigger core dump generation when CPU exceeds or equals specified value (0 to 100 * nCPU)
++.B -s
++Consecutive seconds before dump is written (default is 10).
 +.TP
-+.B
-+\-c
-+Trigger core dump generation when CPU is less than specified value (0 to 100 * nCPU)
++.B -c
++CPU threshold above which to create a dump of the process.
 +.TP
-+.B
-+\-M
-+Trigger core dump generation when memory commit exceeds or equals specified value (MB)
++.B -cl
++CPU threshold below which to create a dump of the process.
 +.TP
-+.B
-+\-m
-+Trigger core dump generation when when memory commit is less than specified value (MB)
++.B -m
++Memory commit threshold in MB at which to create a dump.
 +.TP
-+.B
-+\-T
-+Trigger when thread count exceeds or equals specified value.
++.B -ml
++Trigger when memory commit drops below specified MB value.
 +.TP
-+.B
-+\-F
-+Trigger when filedescriptor count exceeds or equals specified value.
++.B -tc
++Thread count threshold above which to create a dump of the process.
 +.TP
-+.B
-+\-I
-+Polling frequency in milliseconds (default is 1000)
++.B -fc
++File descriptor count threshold above which to create a dump of the process.
 +.TP
-+.B
-+\-n
-+Number of core dumps to write before exiting (default is 1)
++.B -sig
++Signal number to intercept to create a dump of the process.
 +.TP
-+.B
-+\-s
-+Consecutive seconds before dump is written (default is 10)
++.B -e
++[.NET] Create dump when the process encounters an exception.
 +.TP
-+.B
-+\-o
-+Path and/or filename prefix where the core dump is written to
++.B -f
++[.NET] Filter (include) on the (comma seperated) exception name(s).
 +.TP
-+.B
-+\-d
-+Writes diagnostic logs to syslog
-+
++.B -pf
++Polling frequency.
 +.TP
-+TARGET must be exactly one of these:
++.B -o
++Overwrite existing dump file.
 +.TP
-+.B
-+\-p
-+pid of the process
++.B -log
++Writes extended ProcDump tracing to syslog.
 +.TP
-+.B
-+\-w
-+Name of the process executable
-+
++.B -w
++Wait for the specified process to launch if it's not running.
++.TP
++.B -pgid
++Process ID specified refers to a process group ID.
 +.SH COPYRIGHT
-+Copyright (C) 2019 Microsoft Corporation. All rights reserved. Licensed under the MIT license.
++Copyright (C) Microsoft Corporation. All rights reserved. Licensed under the MIT license.

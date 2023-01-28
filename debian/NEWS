@@ -1,0 +1,7 @@
+procdump (1.4-1) UNRELEASED; urgency=medium
+
+    The CLI interface has been changed to match ProcDump utility in Windows.
+    Any scripts that make use of the CLI will need to be updated due to
+    breaking changes to the interface.
+
+ -- Anuradha Weeraman <anuradha@debian.org>  Sat, 28 Jan 2023 20:20:07 +0530
