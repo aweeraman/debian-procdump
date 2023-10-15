@@ -3,6 +3,26 @@ Author: Anuradha Weeraman <anuradha@debian.org>
 Last-Update: 2023-10-15
 Forwarded: yes
 
+--- a/README.md
++++ b/README.md
+@@ -52,7 +52,7 @@ Options:
+    -fc     File descriptor count threshold above which to create a dump of the process.
+    -sig    Signal number to intercept to create a dump of the process.
+    -e      [.NET] Create dump when the process encounters an exception.
+-   -f      [.NET] Filter (include) on the (comma seperated) exception name(s) and exception message(s). Supports wildcards.
++   -f      [.NET] Filter (include) on the (comma separated) exception name(s) and exception message(s). Supports wildcards.
+    -pf     Polling frequency.
+    -o      Overwrite existing dump file.
+    -log    Writes extended ProcDump tracing to syslog.
+@@ -164,4 +164,4 @@ Please see also our [Code of Conduct](CODE_OF_CONDUCT.md).
+ # License
+ Copyright (c) Microsoft Corporation. All rights reserved.
+ 
+-Licensed under the MIT License.
+\ No newline at end of file
++Licensed under the MIT License.
+diff --git a/src/Monitor.c b/src/Monitor.c
+index 3d46ed4..444d383 100644
 --- a/src/Monitor.c
 +++ b/src/Monitor.c
 @@ -387,7 +387,7 @@ void MonitorProcesses(struct ProcDumpConfiguration *self)
@@ -23,3 +43,16 @@ Forwarded: yes
              }
  
              free(dump);
+diff --git a/src/ProcDumpConfiguration.c b/src/ProcDumpConfiguration.c
+index a06cbfd..e86809c 100644
+--- a/src/ProcDumpConfiguration.c
++++ b/src/ProcDumpConfiguration.c
+@@ -1043,7 +1043,7 @@ int PrintUsage()
+     printf("   -fc     File descriptor count threshold above which to create a dump of the process.\n");
+     printf("   -sig    Signal number to intercept to create a dump of the process.\n");
+     printf("   -e      [.NET] Create dump when the process encounters an exception.\n");
+-    printf("   -f      [.NET] Filter (include) on the (comma seperated) exception name(s) and exception messages(s). Supports wildcards.\n");
++    printf("   -f      [.NET] Filter (include) on the (comma separated) exception name(s) and exception messages(s). Supports wildcards.\n");
+     printf("   -pf     Polling frequency.\n");
+     printf("   -o      Overwrite existing dump file.\n");
+     printf("   -log    Writes extended ProcDump tracing to syslog.\n");
