@@ -1,4 +1,4 @@
-procdump (1.4-1) UNRELEASED; urgency=medium
+procdump (2.2-1) UNRELEASED; urgency=medium
 
     The CLI interface has been changed to match ProcDump utility in Windows.
     Any scripts that make use of the CLI will need to be updated due to
