@@ -5,7 +5,7 @@ Forwarded: yes
 
 --- a/procdump.1
 +++ b/procdump.1
-@@ -1,45 +1,105 @@
+@@ -1,45 +1,117 @@
  .\" Manpage for procdump.
 -.TH man 8 "9/6/2023" "2.2" "procdump manpage"
 +.TH PROCDUMP 1 "9/6/2023" "procdump" "User Commands"
@@ -65,6 +65,12 @@ Forwarded: yes
 +.B -m|-ml
 +.I usage
 +] [
++.B -gcm
++.I [[gc-generation:|LOH:|POH:]mem_usage[,mem_usage,...]]
++] [
++.B -gcgen
++.I generation
++] [
 +.B -tc
 +.I threshold
 +] [
@@ -115,10 +121,16 @@ Forwarded: yes
 +CPU threshold below which to create a dump of the process.
 +.TP
 +.B -m
-+Memory commit threshold in MB at which to create a dump.
++Memory commit threshold(s) (MB) above which to create dumps.
 +.TP
 +.B -ml
-+Trigger when memory commit drops below specified MB value.
++Memory commit threshold(s) (MB) below which to create dumps.
++.TP
++.B -gcm
++[.NET] GC memory threshold(s) (MB) above which to create dumps for the specified generation or heap (default is total .NET memory usage).
++.TP
++.B -gcgen
++[.NET] Create dump when the garbage collection of the specified generation starts and finishes.
 +.TP
 +.B -tc
 +Thread count threshold above which to create a dump of the process.
@@ -133,7 +145,7 @@ Forwarded: yes
 +[.NET] Create dump when the process encounters an exception.
 +.TP
 +.B -f
-+[.NET] Filter (include) on the (comma separated) exception name(s).
++[.NET] Filter (include) on the (comma separated) exception name(s) and exception messages(s). Supports wildcards.
 +.TP
 +.B -pf
 +Polling frequency.
