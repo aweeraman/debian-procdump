@@ -3,8 +3,6 @@ Author: Anuradha Weeraman <anuradha@debian.org>
 Last-Update: 2023-10-15
 Forwarded: yes
 
-diff --git a/procdump.1 b/procdump.1
-index 90d00b7..fce2926 100644
 --- a/procdump.1
 +++ b/procdump.1
 @@ -1,45 +1,105 @@
