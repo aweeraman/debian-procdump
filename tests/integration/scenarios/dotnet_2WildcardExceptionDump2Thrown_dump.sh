@@ -19,7 +19,7 @@ if [ $? -eq -1 ]; then
     exit 1
 fi
 
-sudo $PROCDUMPPATH -log -e -f System.InvalidOperationException -w TestWebApi&
+sudo $PROCDUMPPATH -log -n 2 -e -f In*rat*ption -w TestWebApi&
 
 # waiting for procdump child process
 PROCDUMPCHILDPID=-1
@@ -54,7 +54,7 @@ then
     rm $SOCKETPATH
 fi
 
-if [[ "$COUNT" -eq 1 ]]; then
+if [[ "$COUNT" -eq 2 ]]; then
     rm -rf *TestWebApi_*Exception*
     popd
 

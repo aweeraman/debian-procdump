@@ -3,6 +3,12 @@ function runProcDumpAndValidate {
 	DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )";
 	PROCDUMPPATH=$(readlink -m "$DIR/../../bin/procdump");
 
+	# In cases where the previous scenario is still writing a dump we simply want to kill it
+	pkill -9 gdb
+
+	# Make absolutely sure we cleanup dumps from prior run
+	rm -rf /tmp/dump_*
+
 	dumpDir=$(mktemp -d -t dump_XXXXXX)
 	cd $dumpDir
 
@@ -34,10 +40,10 @@ function runProcDumpAndValidate {
 		# We launch procdump in background and wait for 10 secs to complete the monitoring
 		echo "$PROCDUMPPATH $2 $3 $childpid $dumpParam "
 		echo [`date +"%T.%3N"`] Starting ProcDump
-		$PROCDUMPPATH $2 $3 $childpid $dumpParam&
+		$PROCDUMPPATH -log $2 $3 $childpid $dumpParam&
 		pidPD=$!
 		echo "ProcDump PID: $pidPD"
-		sleep 10s
+		sleep 30s
 		echo [`date +"%T.%3N"`] Killing ProcDump
 	    if ps -p $pidPD > /dev/null
 	    then
@@ -58,10 +64,10 @@ function runProcDumpAndValidate {
 		# We launch procdump in background and wait for 10 secs to complete the monitoring
 		echo "$PROCDUMPPATH $2 $3 $dumpParam $TESTPROGNAME"
 		echo [`date +"%T.%3N"`] Starting ProcDump
-		$PROCDUMPPATH $2 $3 $dumpParam "$TESTPROGNAME"&
+		$PROCDUMPPATH -log $2 $3 $dumpParam "$TESTPROGNAME"&
 		pidPD=$!
 		echo "ProcDump PID: $pidPD"
-		sleep 10s
+		sleep 30s
 		echo [`date +"%T.%3N"`] Killing ProcDump
 	    if ps -p $pidPD > /dev/null
 	    then

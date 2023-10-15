@@ -19,7 +19,7 @@ if [ $? -eq -1 ]; then
     exit 1
 fi
 
-sudo $PROCDUMPPATH -log -e -f System.InvalidOperationException -w TestWebApi&
+sudo $PROCDUMPPATH -log -e -f invalid -w TestWebApi&
 
 # waiting for procdump child process
 PROCDUMPCHILDPID=-1
@@ -44,7 +44,6 @@ if [ $SOCKETPATH -eq -1 ]; then
 fi
 echo "SOCKETPATH: "$SOCKETPATH
 
-wget http://localhost:5032/throwinvalidoperation
 wget http://localhost:5032/throwinvalidoperation
 
 sudo pkill -9 procdump

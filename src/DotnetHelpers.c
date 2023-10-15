@@ -10,15 +10,15 @@
 
 //--------------------------------------------------------------------
 //
-// IsCoreClrProcess - Checks to see whether the process is a .NET Core
+// IsCoreClrProcess - Checks to see whether the process is a .NET
 // process by checking the availability of a diagnostics server exposed
 // as a Unix domain socket. If the pipe is available, we assume its a
-// .NET Core process
+// .NET process
 //
-// Returns: true   - if the process is a .NET Core process,[out] socketName
+// Returns: true   - if the process is a .NET process,[out] socketName
 //                   will contain the full socket name. Caller owns the
 //                   memory allocated for the socketName
-//          false  - if the process is NOT a .NET Core process,[out] socketName
+//          false  - if the process is NOT a .NET process,[out] socketName
 //                   will be NULL.
 //
 //--------------------------------------------------------------------
@@ -33,34 +33,39 @@ bool IsCoreClrProcess(pid_t pid, char** socketName)
     // If $TMPDIR is set, use it as the path, otherwise we use /tmp
     // per https://github.com/dotnet/diagnostics/blob/master/documentation/design-docs/ipc-protocol.md
     tmpFolder = GetSocketPath("dotnet-diagnostic-", pid, 0);
+    if(tmpFolder == NULL)
+    {
+        return false;
+    }
 
     // Enumerate all open domain sockets exposed from the process. If one
-    // exists by the following prefix, we assume its a .NET Core process:
+    // exists by the following prefix, we assume its a .NET process:
     //    dotnet-diagnostic-{%d:PID}
     // The sockets are found in /proc/net/unix
     procFile = fopen("/proc/net/unix", "r");
     if(procFile != NULL)
     {
-        fgets(lineBuf, sizeof(lineBuf), procFile); // Skip first line with column headers.
-
-        while(fgets(lineBuf, 4096, procFile) != NULL)
+        if(fgets(lineBuf, sizeof(lineBuf), procFile) != NULL)
         {
-            char* ptr = GetPath(lineBuf);
-            if(ptr!=NULL)
+            while(fgets(lineBuf, 4096, procFile) != NULL)
             {
-                if(strncmp(ptr, tmpFolder, strlen(tmpFolder)) == 0)
+                char* ptr = GetPath(lineBuf);
+                if(ptr!=NULL)
                 {
-                    // Found the correct socket...copy the name to the out param
-                    *socketName = malloc(sizeof(char)*strlen(ptr)+1);
-                    if(*socketName!=NULL)
+                    if(strncmp(ptr, tmpFolder, strlen(tmpFolder)) == 0)
                     {
-                        memset(*socketName, 0, sizeof(char)*strlen(ptr)+1);
-                        if(strncpy(*socketName, ptr, sizeof(char)*strlen(ptr)+1)!=NULL)
+                        // Found the correct socket...copy the name to the out param
+                        int len = strlen(ptr)+1;
+                        *socketName = calloc(len, sizeof(char));
+                        if(*socketName!=NULL)
                         {
-                            Trace("IsCoreClrProcess: CoreCLR diagnostics socket: %s", socketName);
-                            bRet = true;
+                            if(strcpy(*socketName, ptr) != NULL)
+                            {
+                                Trace("IsCoreClrProcess: CoreCLR diagnostics socket: %s", *socketName);
+                                bRet = true;
+                            }
+                            break;
                         }
-                        break;
                     }
                 }
             }
@@ -82,7 +87,7 @@ bool IsCoreClrProcess(pid_t pid, char** socketName)
 
 //--------------------------------------------------------------------
 //
-// GenerateCoreClrDump - Generates the .NET core dump using the
+// GenerateCoreClrDump - Generates the .NET dump using the
 // diagnostics server.
 //
 // Returns: true   - if core dump was generated
@@ -101,7 +106,7 @@ bool GenerateCoreClrDump(char* socketName, char* dumpFileName)
     {
         if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
         {
-            Trace("GenerateCoreClrDump: Failed to create socket for .NET Core dump generation.");
+            Trace("GenerateCoreClrDump: Failed to create socket for .NET dump generation [%d].", errno);
         }
         else
         {
@@ -112,7 +117,8 @@ bool GenerateCoreClrDump(char* socketName, char* dumpFileName)
 
             if (connect(fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_un)) == -1)
             {
-                Trace("GenerateCoreClrDump: Failed to connect to socket for .NET Core dump generation.");
+                Trace("GenerateCoreClrDump: Failed to connect to socket for .NET dump generation [%d].", errno);
+                Log(error, "Failed to connect to the target .NET process diagnostics socket at %s [%d].", socketName, errno);
             }
             else
             {
@@ -201,5 +207,12 @@ bool GenerateCoreClrDump(char* socketName, char* dumpFileName)
         }
     }
 
+#if (__GNUC__ >= 13)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
+#endif
     return bRet;
+#if (__GNUC__ >= 13)
+#pragma GCC diagnostic pop
+#endif
 }

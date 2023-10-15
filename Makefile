@@ -1,7 +1,7 @@
 ROOT=.
-CC=gcc
+CC ?= gcc
 CFLAGS ?= -Wall
-CCFLAGS=$(CFLAGS) -I ./include -pthread -std=gnu99
+CCFLAGS=$(CFLAGS) -I ./include -pthread -std=gnu99 -fstack-protector-all -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -O2 -fanalyzer -Werror
 LIBDIR=lib
 OBJDIR=obj
 SRCDIR=src
@@ -54,17 +54,17 @@ install:
 	cp procdump.1 $(DESTDIR)$(MANDIR)
 
 $(OBJDIR)/ProcDumpProfiler.so: $(PROFSRCDIR)/ClassFactory.cpp $(PROFSRCDIR)/ProcDumpProfiler.cpp $(PROFSRCDIR)/dllmain.cpp $(PROFSRCDIR)/corprof_i.cpp $(PROFSRCDIR)/easylogging++.cc | $(OBJDIR)
-	$(PROFCLANG) -o $@ $(PROFCXXFLAGS) -I $(PROFINCDIR) $^
+	$(PROFCLANG) -o $@ $(PROFCXXFLAGS) -I $(PROFINCDIR) -I $(INCDIR) $^
 	ld -r -b binary -o $(OBJDIR)/ProcDumpProfiler.o $(OBJDIR)/ProcDumpProfiler.so
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
-	$(CC) -c -g -o $@ $< $(CCFLAGS)
+	$(CC) -c -g -o $@ $< $(CCFLAGS) $(OPT_CCFLAGS)
 
 $(OBJDIR)/%.o: $(TESTDIR)/%.c | $(OBJDIR)
 	$(CC) -c -g -o $@ $< $(CCFLAGS)
 
-$(OUT): $(OBJS) | $(BINDIR)
-	$(CC) -o $@ $^ $(OBJDIR)/ProcDumpProfiler.o $(CCFLAGS)
+$(OUT): $(OBJS) | $(BINDIR) $(OBJDIR)/ProcDumpProfiler.so
+	$(CC) -o $@ $^ $(OBJDIR)/ProcDumpProfiler.o $(CCFLAGS) $(OPT_CCFLAGS)
 
 $(TESTOUT): $(TESTOBJS) | $(BINDIR)
 	$(CC) -o $@ $^ $(CCFLAGS)

@@ -19,6 +19,7 @@
 #include "cor.h"
 #include "corprof.h"
 #include "profilerstring.h"
+#include "ProfilerCommon.h"
 #include "easylogging++.h"
 
 #define DETACH_TIMEOUT  30000
@@ -103,15 +104,21 @@ private:
     ICorProfilerInfo* corProfilerInfo;
     ICorProfilerInfo8* corProfilerInfo8;
     std::vector<struct ExceptionMonitorEntry> exceptionMonitorList;
+    std::vector<uint64_t> gcMemoryThresholdMonitorList;
     pthread_t healthThread;
     std::string processName;
     std::string fullDumpPath;
     pthread_mutex_t endDumpCondition;
+    enum TriggerType triggerType;
+    int currentThresholdIndex;
+    int gcGeneration;
+    bool gcGenStarted;
 
     String GetExceptionName(ObjectID objectId);
-    bool ParseClientData(char* fw);
+    String GetExceptionMessage(ObjectID objectId);
+    bool ParseClientData(char* clientData);
     WCHAR* GetUint16(char* buffer);
-    std::string GetDumpName(uint16_t dumpCount);
+    std::string GetDumpName(uint16_t dumpCount, std::string name);
     std::string GetProcessName();
     bool GenerateCoreClrDump(char* socketName, char* dumpFileName);
     bool IsCoreClrProcess(pid_t pid, char** socketName);
@@ -120,6 +127,10 @@ private:
     void SendCatastrophicFailureStatus();
     int send_all(int socket, void* buffer, size_t length);
     int recv_all(int socket, void* buffer, size_t length);
+    bool WildcardSearch(WCHAR*, WCHAR*);
+    u_int64_t GetGCHeapSize(int generation);
+    bool WriteDumpHelper(std::string dumpName);
+    bool IsHighPerfBasicGC();
 
 public:
     CorProfiler();

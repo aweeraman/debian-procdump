@@ -59,16 +59,15 @@ int ExtractProfiler()
 // process instructing the runtime to load the profiler.
 //
 //--------------------------------------------------------------------
-int LoadProfiler(pid_t pid, char* filter, char* fullDumpPath)
+int LoadProfiler(pid_t pid, char* clientData)
 {
     struct sockaddr_un addr = {0};
     uint32_t attachTimeout = 5000;
     struct CLSID profilerGuid = {0};
     unsigned int clientDataSize = 0;
 
-    auto_free_fd int fd = 0;
+    auto_free_fd int fd = -1;
     auto_free char* socketName = NULL;
-    auto_free char* clientData = NULL;
     auto_free char* dumpPath = NULL;
     auto_free uint16_t* profilerPathW = NULL;
     auto_free void* temp_buffer = NULL;
@@ -81,7 +80,7 @@ int LoadProfiler(pid_t pid, char* filter, char* fullDumpPath)
 
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
     {
-        Trace("LoadProfiler: Failed to create socket for .NET Core dump generation.");
+        Trace("LoadProfiler: Failed to create socket for .NET dump generation.");
         return -1;
     }
 
@@ -92,7 +91,7 @@ int LoadProfiler(pid_t pid, char* filter, char* fullDumpPath)
 
     if (connect(fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_un)) == -1)
     {
-        Trace("LoadProfiler: Failed to connect to socket for .NET Core profiler load.");
+        Trace("LoadProfiler: Failed to connect to socket for .NET profiler load.");
         return -1;
     }
 
@@ -119,19 +118,9 @@ int LoadProfiler(pid_t pid, char* filter, char* fullDumpPath)
     payloadSize += profilerPathLen*sizeof(uint16_t);
 
     // client data
-    if(filter)
+    if(clientData)
     {
-        // client data in the following format:
-        // <fullpathtodumplocation>;<pidofprocdump>;<exception>:<numdumps>;<exception>:<numdumps>,...
-        clientDataSize = snprintf(NULL, 0, "%s;%d;%s", fullDumpPath, getpid(), filter) + 1;
-        clientData = malloc(clientDataSize);
-        if(clientData==NULL)
-        {
-            Trace("LoadProfiler: Failed to allocate memory for client data.");
-            return -1;
-        }
-
-        sprintf(clientData, "%s;%d;%s", fullDumpPath, getpid(), filter);
+        clientDataSize = strlen(clientData) + 1;
     }
     else
     {
@@ -141,7 +130,7 @@ int LoadProfiler(pid_t pid, char* filter, char* fullDumpPath)
     payloadSize += sizeof(clientDataSize);
     payloadSize += clientDataSize*sizeof(unsigned char);
 
-    Trace("LoadProfiler: Exception list: %s", clientData);
+    Trace("LoadProfiler: client data: %s", clientData);
 
     uint16_t totalPacketSize = sizeof(struct IpcHeader)+payloadSize;
 
@@ -237,8 +226,15 @@ int LoadProfiler(pid_t pid, char* filter, char* fullDumpPath)
         }
     }
 
+#if (__GNUC__ >= 13)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
+#endif
     return 0;
 }
+#if (__GNUC__ >= 13)
+#pragma GCC diagnostic pop
+#endif
 
 //--------------------------------------------------------------------
 //
@@ -254,7 +250,7 @@ int LoadProfiler(pid_t pid, char* filter, char* fullDumpPath)
 //    cancellation requests to.
 //
 //--------------------------------------------------------------------
-int InjectProfiler(pid_t pid, char* filter, char* fullDumpPath)
+int InjectProfiler(pid_t pid, char* clientData)
 {
     int ret = ExtractProfiler();
     if(ret != 0)
@@ -264,7 +260,7 @@ int InjectProfiler(pid_t pid, char* filter, char* fullDumpPath)
         return ret;
     }
 
-    ret = LoadProfiler(pid, filter, fullDumpPath);
+    ret = LoadProfiler(pid, clientData);
     if(ret != 0)
     {
         Log(error, "Failed to load profiler. Please make sure you are running elevated and targetting a .NET process.");
@@ -297,9 +293,10 @@ char* GetEncodedExceptionFilter(char* exceptionFilterCmdLine, unsigned int numDu
     char* exceptionFilter = NULL;
     char* exceptionFilterCur = NULL;
     char tmp[10];
+    size_t len = 0;
 
     // If no exceptions were specified using -f we should dump on any exception (hence we add <any>)
-    char* cpy = exceptionFilterCmdLine ? strdup(exceptionFilterCmdLine) : strdup("<any>");
+    char* cpy = exceptionFilterCmdLine ? strdup(exceptionFilterCmdLine) : strdup("*");
 
     numberOfDumpsLen = sprintf(tmp, "%d", numDumps);
 
@@ -313,13 +310,14 @@ char* GetEncodedExceptionFilter(char* exceptionFilterCmdLine, unsigned int numDu
 
     free(cpy);
 
-    cpy = exceptionFilterCmdLine ? strdup(exceptionFilterCmdLine) : strdup("<any>");
+    cpy = exceptionFilterCmdLine ? strdup(exceptionFilterCmdLine) : strdup("*");
 
     totalExceptionNameLen++; // NULL terminator
 
-    exceptionFilter = malloc(totalExceptionNameLen+numExceptions*(numberOfDumpsLen+2)); // +1 for : seperator +1 for ; seperator
+    exceptionFilter = malloc(totalExceptionNameLen+numExceptions*(numberOfDumpsLen+2+2)); // +1 for : seperator +1 for ; seperator +2 for 2 '*' wildcard
     if(exceptionFilter==NULL)
     {
+        free(cpy);
         return NULL;
     }
 
@@ -328,7 +326,23 @@ char* GetEncodedExceptionFilter(char* exceptionFilterCmdLine, unsigned int numDu
     token = strtok(cpy, ",");
     while(token!=NULL)
     {
-        exceptionFilterCur += sprintf(exceptionFilterCur, "%s:%d;", token, numDumps);
+        len = strlen(token);
+        if(token[0] != '*' && token[len-1] != '*')
+        {
+            exceptionFilterCur += sprintf(exceptionFilterCur, "*%s*:%d;", token, numDumps);
+        }
+        else if(token[0] != '*')
+        {
+            exceptionFilterCur += sprintf(exceptionFilterCur, "*%s:%d;", token, numDumps);
+        }
+        else if(token[len-1] != '*')
+        {
+            exceptionFilterCur += sprintf(exceptionFilterCur, "%s*:%d;", token, numDumps);
+        }
+        else
+        {
+            exceptionFilterCur += sprintf(exceptionFilterCur, "%s:%d;", token, numDumps);
+        }
         token = strtok(NULL, ",");
     }
 

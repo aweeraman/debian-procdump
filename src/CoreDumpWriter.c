@@ -40,7 +40,7 @@ struct CoreDumpWriter *NewCoreDumpWriter(enum ECoreDumpType type, struct ProcDum
 //--------------------------------------------------------------------
 char* GetCoreDumpName(pid_t pid, char* procName, char* dumpPath, char* dumpName, enum ECoreDumpType type)
 {
-    char *name = sanitize(procName);
+    auto_free char *name = sanitize(procName);
     time_t rawTime = {0};
     struct tm* timerInfo = NULL;
     char date[DATE_LENGTH];
@@ -164,7 +164,7 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
     char coreDumpFileName[PATH_MAX+1] = {0};
     auto_free char* gcorePrefixName = NULL;
     int  lineLength;
-    int  i;
+    int  i = 0;
     int  rc = 0;
     pid_t gcorePid;
     FILE *commandPipe = NULL;
@@ -175,14 +175,16 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
     gcorePrefixName = GetCoreDumpName(self->Config->ProcessId, name, self->Config->CoreDumpPath, self->Config->CoreDumpName, self->Type);
 
     // assemble the command
-    if(snprintf(command, BUFFER_LENGTH, "gcore -o %s %d 2>&1", gcorePrefixName, pid) < 0){
+    if(snprintf(command, BUFFER_LENGTH, "gcore -o %s %d 2>&1", gcorePrefixName, pid) < 0)
+    {
         Log(error, INTERNAL_ERROR);
         Trace("WriteCoreDumpInternal: failed sprintf gcore command");
         exit(-1);
     }
 
     // assemble filename
-    if(snprintf(coreDumpFileName, PATH_MAX, "%s.%d", gcorePrefixName, pid) < 0){
+    if(snprintf(coreDumpFileName, PATH_MAX, "%s.%d", gcorePrefixName, pid) < 0)
+    {
         Log(error, INTERNAL_ERROR);
         Trace("WriteCoreDumpInternal: failed sprintf core file name");
         exit(-1);
@@ -196,7 +198,8 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
     }
 
     // check if we're allowed to write into the target directory
-    if(access(self->Config->CoreDumpPath, W_OK) < 0) {
+    if(access(self->Config->CoreDumpPath, W_OK) < 0)
+    {
         Log(error, INTERNAL_ERROR);
         Trace("WriteCoreDumpInternal: no write permission to core dump target file %s",
               coreDumpFileName);
@@ -205,10 +208,10 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
 
     if(socketName!=NULL)
     {
-        // If we have a socket name, we're dumping a .NET Core 3+ process....
+        // If we have a socket name, we're dumping a .NET process....
         if(GenerateCoreClrDump(socketName, coreDumpFileName)==false)
         {
-            Log(error, "An error occurred while generating the core dump for .NET 3.x+ process");
+            Log(error, "An error occurred while generating the core dump for the specified .NET process");
         }
         else
         {
@@ -216,43 +219,44 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
             Log(info, "Core dump %d generated: %s", self->Config->NumberOfDumpsCollected, coreDumpFileName);
 
             self->Config->NumberOfDumpsCollected++; // safe to increment in crit section
-            if (self->Config->NumberOfDumpsCollected >= self->Config->NumberOfDumpsToCollect) {
-                SetEvent(&self->Config->evtQuit.event); // shut it down, we're done here
-                rc = 1;
-            }
         }
     }
     else
     {
         // allocate output buffer
         outputBuffer = (char**)malloc(sizeof(char*) * MAX_LINES);
-        if(outputBuffer == NULL){
+        if(outputBuffer == NULL)
+        {
             Log(error, INTERNAL_ERROR);
             Trace("WriteCoreDumpInternal: failed gcore output buffer allocation");
             exit(-1);
         }
 
         // Oterwise, we use gcore dump generation   TODO@FUTURE: We might consider adding a forcegcore flag in cases where
-        // someone wants to use gcore even for .NET Core 3.x+ processes.
+        // someone wants to use gcore even for .NET processes.
         commandPipe = popen2(command, "r", &gcorePid);
         self->Config->gcorePid = gcorePid;
 
-        if(commandPipe == NULL){
+        if(commandPipe == NULL)
+        {
             Log(error, "An error occurred while generating the core dump");
             Trace("WriteCoreDumpInternal: Failed to open pipe to gcore");
             exit(1);
         }
 
         // read all output from gcore command
-        for(i = 0; i < MAX_LINES && fgets(lineBuffer, sizeof(lineBuffer), commandPipe) != NULL; i++) {
-            lineLength = strlen(lineBuffer);                                // get # of characters read
+        for(i = 0; i < MAX_LINES && fgets(lineBuffer, sizeof(lineBuffer), commandPipe) != NULL; i++)
+        {
+            lineLength = strlen(lineBuffer) + 1;                                // get # of characters read
 
             outputBuffer[i] = (char*)malloc(sizeof(char) * lineLength);
-            if(outputBuffer[i] != NULL) {
-                strncpy(outputBuffer[i], lineBuffer, lineLength - 1);           // trim newline off
+            if(outputBuffer[i] != NULL)
+            {
+                strcpy(outputBuffer[i], lineBuffer);
                 outputBuffer[i][lineLength-1] = '\0';                           // append null character
             }
-            else {
+            else
+            {
                 Log(error, INTERNAL_ERROR);
                 Trace("WriteCoreDumpInternal: failed to allocate gcore error message buffer");
                 exit(-1);
@@ -271,7 +275,8 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
         bool gcoreFailedMsg = false;    // in case error sneaks through the message output
 
         // check if gcore was able to generate the dump
-        if(gcoreStatus != 0 || pcloseStatus != 0 || (gcoreFailedMsg = (strstr(outputBuffer[i-1], "gcore: failed") != NULL))){
+        if(gcoreStatus != 0 || pcloseStatus != 0 || (gcoreFailedMsg = (strstr(outputBuffer[i-1], "gcore: failed") != NULL)))
+        {
             Log(error, "An error occurred while generating the core dump:");
             if (gcoreStatus != 0)
                 Log(error, "\tDump exit status = %d", gcoreStatus);
@@ -281,17 +286,13 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
                 Log(error, "\tgcore failed");
 
             // log gcore message
-            for(int j = 0; j < i; j++){
-                if(outputBuffer[j] != NULL){
+            for(int j = 0; j < i; j++)
+            {
+                if(outputBuffer[j] != NULL)
+                {
                     Log(error, "GCORE - %s", outputBuffer[j]);
                 }
             }
-
-
-            for(int j = 0; j < i; j++) {
-                free(outputBuffer[j]);
-            }
-            free(outputBuffer);
 
             rc = gcoreStatus;
         }
@@ -301,28 +302,40 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
             sleep(1);
 
             // validate that core dump file was generated
-            if(access(coreDumpFileName, F_OK) != -1) {
-                if(self->Config->nQuit){
+            if(access(coreDumpFileName, F_OK) != -1)
+            {
+                if(self->Config->nQuit)
+                {
                     // if we are in a quit state from interrupt delete partially generated core dump file
                     int ret = unlink(coreDumpFileName);
-                    if (ret < 0 && errno != ENOENT) {
+                    if (ret < 0 && errno != ENOENT)
+                    {
                         Trace("WriteCoreDumpInternal: Failed to remove partial core dump");
                         exit(-1);
                     }
                 }
-                else{
+                else
+                {
                     // log out sucessful core dump generated
                     Log(info, "Core dump %d generated: %s", self->Config->NumberOfDumpsCollected, coreDumpFileName);
 
                     self->Config->NumberOfDumpsCollected++; // safe to increment in crit section
-                    if (self->Config->NumberOfDumpsCollected >= self->Config->NumberOfDumpsToCollect) {
+                    if (self->Config->NumberOfDumpsCollected >= self->Config->NumberOfDumpsToCollect)
+                    {
                         SetEvent(&self->Config->evtQuit.event); // shut it down, we're done here
                         rc = 1;
                     }
                 }
             }
         }
+
+        for(int j = 0; j < i; j++)
+        {
+            free(outputBuffer[j]);
+        }
+        free(outputBuffer);
     }
+
 
     free(name);
 
