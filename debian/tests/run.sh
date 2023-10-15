@@ -8,7 +8,7 @@ echo "TASK PID = $TASK_PID"
 
 # Procdump to kill the sleeper process. Needs root.
 ls -l /usr/bin/procdump
-sudo procdump -pgid $TASK_PGID -n 1 &
+procdump -pgid $TASK_PGID -n 1 &
 PROCDUMP_PID=$!
 echo "PROCDUMP PID = $PROCDUMP_PID"
 ps aux | grep -i $PROCDUMP_PID
