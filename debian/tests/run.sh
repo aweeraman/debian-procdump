@@ -3,11 +3,12 @@
 # Send a sleeper process into the background
 sh -c "sleep 10" &
 TASK_PID=$!
+TASK_PGID=$(ps -o pgid= $TASK_PID)
 echo "TASK PID = $TASK_PID"
 
 # Procdump to kill the sleeper process. Needs root.
 ls -l /usr/bin/procdump
-procdump -p $TASK_PID -n 1 -s 1 &
+sudo procdump -pgid $TASK_PGID -n 1 &
 PROCDUMP_PID=$!
 echo "PROCDUMP PID = $PROCDUMP_PID"
 ps aux | grep -i $PROCDUMP_PID
@@ -24,11 +25,12 @@ echo "Killing $PROCDUMP_PID"
 kill -9 $PROCDUMP_PID 2>/dev/null
 
 # Check if a core file has been created and clean it up
-CORE_COUNT=$(ls -1 sh_time*${TASK_PID}* | wc -l)
-rm sh_time*${TASK_PID}*
+CORE_COUNT=$(ls -1 sh_time* | wc -l)
+rm -f sh_time*
+rm -f sleep_time*
 echo "Cores dumped: $CORE_COUNT"
 
-if [ $CORE_COUNT -eq 1 ]; then
+if [ $CORE_COUNT -gt 0 ]; then
 	echo "Successful"
 	exit 0
 else
