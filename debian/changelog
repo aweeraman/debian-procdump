@@ -1,4 +1,4 @@
-procdump (2.2-1) UNRELEASED; urgency=high
+procdump (2.2-1) unstable; urgency=high
 
   * New upstream release.
   * NEWS file on breaking changes to the CLI.

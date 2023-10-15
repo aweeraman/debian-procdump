@@ -1,7 +1,7 @@
-procdump (2.2-1) UNRELEASED; urgency=medium
+procdump (2.2-1) unstable; urgency=high
 
     The CLI interface has been changed to match ProcDump utility in Windows.
     Any scripts that make use of the CLI will need to be updated due to
     breaking changes to the interface.
 
- -- Anuradha Weeraman <anuradha@debian.org>  Sat, 28 Jan 2023 20:20:07 +0530
+ -- Anuradha Weeraman <anuradha@debian.org>  Sun, 15 Oct 2023 20:05:20 +0530
