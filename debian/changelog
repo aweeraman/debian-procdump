@@ -1,11 +1,11 @@
-procdump (1.4-1) UNRELEASED; urgency=medium
+procdump (2.2-1) UNRELEASED; urgency=high
 
   * New upstream release.
   * NEWS file on breaking changes to the CLI.
   * Bumped up standards version.
   * Several lintian fixes.
 
- -- Anuradha Weeraman <anuradha@debian.org>  Sat, 28 Jan 2023 20:20:07 +0530
+ -- Anuradha Weeraman <anuradha@debian.org>  Sun, 15 Oct 2023 20:05:20 +0530
 
 procdump (1.2-3) unstable; urgency=medium
 
