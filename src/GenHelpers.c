@@ -6,7 +6,77 @@
 // General purpose helpers
 //
 //--------------------------------------------------------------------
+#define _GNU_SOURCE
 #include "Includes.h"
+#include <syscall.h>
+
+//--------------------------------------------------------------------
+//
+// GetSeparatedValues -
+// Returns a list of values separated by the specified separator.
+//
+//--------------------------------------------------------------------
+int* GetSeparatedValues(char* src, char* separator, int* numValues)
+{
+    int* ret = NULL;
+    int i = 0;
+
+    if(src == NULL || numValues == NULL)
+    {
+        return NULL;
+    }
+
+    char* dup = strdup(src);        // Duplicate to avoid changing the original using strtok
+    if(dup == NULL)
+    {
+        return NULL;
+    }
+
+    char* token = strtok((char*)dup, separator);
+    while (token != NULL)
+    {
+        i++;
+        token = strtok(NULL, separator);
+    }
+
+    free(dup);
+
+    if(i > 0)
+    {
+        ret = malloc(i*sizeof(int));
+        if(ret)
+        {
+            i = 0;
+            dup = strdup(src);
+            if(dup == NULL)
+            {
+                free(ret);
+                ret = NULL;
+                return NULL;
+            }
+
+            token = strtok((char*)dup, separator);
+            while (token != NULL)
+            {
+                if(!ConvertToInt(token, &ret[i]))
+                {
+                    free(ret);
+                    ret = NULL;
+                    return NULL;
+                }
+
+                i++;
+                token = strtok(NULL, separator);
+            }
+
+            free(dup);
+        }
+    }
+
+    *numValues = i;
+    return ret;
+}
+
 
 //--------------------------------------------------------------------
 //
@@ -90,6 +160,11 @@ uint16_t* GetUint16(char* buffer)
     if(buffer!=NULL)
     {
         dumpFileNameW = malloc((strlen(buffer)+1)*sizeof(uint16_t));
+        if(dumpFileNameW==NULL)
+        {
+            return NULL;
+        }
+
         for(int i=0; i<(strlen(buffer)+1); i++)
         {
             dumpFileNameW[i] = (uint16_t) buffer[i];
@@ -190,7 +265,15 @@ FILE *popen2(const char *command, const char *type, pid_t *pid)
         }
 
     }
+#if (__GNUC__ >= 13)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
+#endif
 }
+#if (__GNUC__ >= 13)
+#pragma GCC diagnostic pop
+#endif
+
 
 //--------------------------------------------------------------------
 //
@@ -208,6 +291,11 @@ char *sanitize(char * processName)
     }
 
     char *sanitizedProcessName = strdup(processName);
+    if(sanitizedProcessName==NULL)
+    {
+        return NULL;
+    }
+
     for (int i = 0; i < strlen(sanitizedProcessName); i++)
     {
         if (!isalnum(sanitizedProcessName[i]))
@@ -460,6 +548,25 @@ int recv_all(int socket, void* buffer, size_t length)
         ptr += i;
         length -= i;
     }
+
+    return 0;
+}
+
+//--------------------------------------------------------------------
+//
+// gettid
+//
+// Returns the current thread ID. Useful to add in trace statements
+// when threads are created to match to a debug session.
+//
+// Note: SYS_gettid is not POSIX compliant.
+//
+//--------------------------------------------------------------------
+pid_t gettid()
+{
+#ifdef SYS_gettid
+    return syscall(SYS_gettid);
+#endif
 
     return 0;
 }

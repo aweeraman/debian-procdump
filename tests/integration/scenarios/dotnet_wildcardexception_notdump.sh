@@ -19,7 +19,7 @@ if [ $? -eq -1 ]; then
     exit 1
 fi
 
-sudo $PROCDUMPPATH -log -e -f System.InvalidOperationException -w TestWebApi&
+sudo $PROCDUMPPATH -log -e -f on*Existing -w TestWebApi&
 
 # waiting for procdump child process
 PROCDUMPCHILDPID=-1
@@ -45,7 +45,6 @@ fi
 echo "SOCKETPATH: "$SOCKETPATH
 
 wget http://localhost:5032/throwinvalidoperation
-wget http://localhost:5032/throwinvalidoperation
 
 sudo pkill -9 procdump
 COUNT=( $(ls *TestWebApi_*Exception* | wc -l) )
@@ -54,8 +53,12 @@ then
     rm $SOCKETPATH
 fi
 
-if [[ "$COUNT" -eq 1 ]]; then
+if [[ "$COUNT" -ne 0 ]]; then
     rm -rf *TestWebApi_*Exception*
+    sudo pkill -9 TestWebApi
+    popd
+    exit 1
+else
     popd
 
     #check to make sure profiler so is unloaded
@@ -66,8 +69,4 @@ if [[ "$COUNT" -eq 1 ]]; then
     else
         exit 0
     fi
-else
-    pkill -9 TestWebApi
-    popd
-    exit 1
 fi

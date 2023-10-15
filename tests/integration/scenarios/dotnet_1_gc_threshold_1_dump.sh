@@ -8,7 +8,7 @@ source $HELPERS
 
 pushd .
 cd $TESTWEBAPIPATH
-rm -rf *TestWebApi_*Exception*
+rm -rf *TestWebApi_*gc_size_*
 dotnet run --urls=http://localhost:5032&
 
 # waiting TestWebApi ready to service
@@ -19,7 +19,8 @@ if [ $? -eq -1 ]; then
     exit 1
 fi
 
-sudo $PROCDUMPPATH -log -e -f System.InvalidOperationException -w TestWebApi&
+# Wait for 1 GC commit thresholds (10MB)
+sudo $PROCDUMPPATH -log -gcm 10 -w TestWebApi&
 
 # waiting for procdump child process
 PROCDUMPCHILDPID=-1
@@ -44,18 +45,17 @@ if [ $SOCKETPATH -eq -1 ]; then
 fi
 echo "SOCKETPATH: "$SOCKETPATH
 
-wget http://localhost:5032/throwinvalidoperation
-wget http://localhost:5032/throwinvalidoperation
+wget -O /dev/null http://localhost:5032/memincrease
 
 sudo pkill -9 procdump
-COUNT=( $(ls *TestWebApi_*Exception* | wc -l) )
+COUNT=( $(ls *TestWebApi_*gc_size_* | wc -l) )
 if [ -S $SOCKETPATH ];
 then
     rm $SOCKETPATH
 fi
 
 if [[ "$COUNT" -eq 1 ]]; then
-    rm -rf *TestWebApi_*Exception*
+    rm -rf *TestWebApi_*gc_size_*
     popd
 
     #check to make sure profiler so is unloaded

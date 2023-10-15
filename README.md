@@ -1,5 +1,5 @@
 # ProcDump [![Build Status](https://dev.azure.com/sysinternals/Tools/_apis/build/status/Sysinternals.ProcDump-for-Linux?branchName=master)](https://dev.azure.com/sysinternals/Tools/_build/latest?definitionId=341&branchName=master)
-ProcDump is a Linux reimagining of the classic ProcDump tool from the Sysinternals suite of tools for Windows.  ProcDump provides a convenient way for Linux developers to create core dumps of their application based on performance triggers.
+ProcDump is a Linux reimagining of the classic ProcDump tool from the Sysinternals suite of tools for Windows.  ProcDump provides a convenient way for Linux developers to create core dumps of their application based on performance triggers. ProcDump for Linux is part of [Sysinternals](https://sysinternals.com).
 
 ![ProcDump in use](procdump.gif "Procdump in use")
 
@@ -11,64 +11,48 @@ ProcDump is a Linux reimagining of the classic ProcDump tool from the Sysinterna
   * Fedora 29
   * Ubuntu 16.04 LTS
 * `gdb` >= 7.6.1
-* `zlib` (build-time only)
-* `clang`
 
 ## Install ProcDump
-Checkout our [install instructions](INSTALL.md) for distribution specific steps to install Procdump.
+Please see installation instructions [here](INSTALL.md).
 
-## Build ProcDump from Scratch
-To build from scratch you'll need to have a C compiler (supporting C11), `zlib`, and a `make` utility installed. Then simply run:
-
-```
-make
-make install
-```
-
-### Building Procdump Packages
-The distribution packages for Procdump for Linux are constructed utilizing `debbuild` for Debian targets and `rpmbuild` for Fedora targets.
-
-To build a `deb` package of Procdump on Ubuntu simply run:
-```sh
-make && make deb
-```
-
-To build a `rpm` package of Procdump on Fedora simply run:
-```sh
-make && make rpm
-```
+## Build
+Please see build instructions [here](BUILD.md).
 
 ## Usage
 **BREAKING CHANGE** With the release of ProcDump 1.3 the switches are now aligned with the Windows ProcDump version.
 ```
 procdump [-n Count]
-         [-s Seconds]
-         [-c|-cl CPU_Usage]
-         [-m|-ml Commit_Usage]
-         [-tc Thread_Threshold]
-         [-fc FileDescriptor_Threshold]
-         [-sig Signal_Number]
-         [-e]
-         [-f Include_Filter,...]
-         [-pf Polling_Frequency]
-         [-o]
-         [-log]
-         {
+        [-s Seconds]
+        [-c|-cl CPU_Usage]
+        [-m|-ml Commit_Usage1[,Commit_Usage2,...]]
+        [-gcm [<GCGeneration>: | LOH: | POH:]Memory_Usage1[,Memory_Usage2...]]
+        [-gcgen Generation]
+        [-tc Thread_Threshold]
+        [-fc FileDescriptor_Threshold]
+        [-sig Signal_Number]
+        [-e]
+        [-f Include_Filter,...]
+        [-pf Polling_Frequency]
+        [-o]
+        [-log]
+        {
           {{[-w] Process_Name | [-pgid] PID} [Dump_File | Dump_Folder]}
-         }
+        }
 
 Options:
    -n      Number of dumps to write before exiting.
    -s      Consecutive seconds before dump is written (default is 10).
    -c      CPU threshold above which to create a dump of the process.
    -cl     CPU threshold below which to create a dump of the process.
-   -m      Memory commit threshold in MB at which to create a dump.
-   -ml     Trigger when memory commit drops below specified MB value.
+   -m      Memory commit threshold(s) (MB) above which to create dumps.
+   -ml     Memory commit threshold(s) (MB) below which to create dumps.
+   -gcm    [.NET] GC memory threshold(s) (MB) above which to create dumps for the specified generation or heap (default is total .NET memory usage).
+   -gcgen  [.NET] Create dump when the garbage collection of the specified generation starts and finishes.
    -tc     Thread count threshold above which to create a dump of the process.
    -fc     File descriptor count threshold above which to create a dump of the process.
    -sig    Signal number to intercept to create a dump of the process.
    -e      [.NET] Create dump when the process encounters an exception.
-   -f      [.NET] Filter (include) on the (comma seperated) exception name(s).
+   -f      [.NET] Filter (include) on the (comma seperated) exception name(s) and exception message(s). Supports wildcards.
    -pf     Polling frequency.
    -o      Overwrite existing dump file.
    -log    Writes extended ProcDump tracing to syslog.
@@ -106,6 +90,26 @@ The following will create a core dump when CPU usage is >= 65% or memory usage i
 ```
 sudo procdump -c 65 -m 100 1234
 ```
+The following will create a core dump when memory usage is >= 100 MB followed by another dump when memory usage is >= 200MB.
+```
+sudo procdump -m 100,200 1234
+```
+The following will create a core dump when the total .NET memory usage is >= 100 MB followed by another dump when memory usage is >= 200MB.
+```
+sudo procdump -gcm 100,200 1234
+```
+The following will create a core dump when .NET memory usage for generation 1 is >= 1 MB followed by another dump when memory usage is >= 2MB.
+```
+sudo procdump -gcm 1:1,2 1234
+```
+The following will create a core dump when .NET Large Object Heap memory usage is >= 100 MB followed by another dump when memory usage is >= 200MB.
+```
+sudo procdump -gcm LOH:100,200 1234
+```
+The following will create a core dump at the start and end of a .NET generation 1 garbage collection.
+```
+sudo procdump -gcgen 1
+```
 The following will create a core dump in the `/tmp` directory immediately.
 ```
 sudo procdump 1234 /tmp
@@ -121,6 +125,14 @@ sudo procdump -sig 11 1234
 The following will create a core dump when the target .NET application throws a System.InvalidOperationException
 ```
 sudo procdump -e -f System.InvalidOperationException 1234
+```
+The include filter supports partial and wildcard matching, so the following will create a core dump too for a System.InvalidOperationException
+```
+sudo procdump -e -f InvalidOperation 1234
+```
+or
+```
+sudo procdump -e -f "*Invali*Operation*" 1234
 ```
 > All options can also be used with `-w`, to wait for any process with the given name.
 
@@ -153,4 +165,3 @@ Please see also our [Code of Conduct](CODE_OF_CONDUCT.md).
 Copyright (c) Microsoft Corporation. All rights reserved.
 
 Licensed under the MIT License.
-

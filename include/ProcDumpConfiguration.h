@@ -43,17 +43,6 @@
 // Structs
 // -------------------
 
-enum TriggerType
-{
-    Processor,
-    Commit,
-    Timer,
-    Signal,
-    ThreadCount,
-    FileDescriptorCount,
-    Exception
-};
-
 struct TriggerThread
 {
     pthread_t thread;
@@ -80,6 +69,7 @@ struct ProcDumpConfiguration {
     int NumberOfDumpsCollected; // Number of dumps we have collected
     bool bTerminated; // Do we know whether the process has terminated and subsequently whether we are terminating?
     char* socketPath;
+    bool bExitProcessMonitor;
 
     // Quit
     int nQuit; // if not 0, then quit
@@ -95,8 +85,12 @@ struct ProcDumpConfiguration {
     // Options
     int CpuThreshold;               // -c
     bool bCpuTriggerBelowValue;     // -cl
-    int MemoryThreshold;            // -m
-    bool bMemoryTriggerBelowValue;  // -m
+    int* MemoryThreshold;           // -m
+    int MemoryThresholdCount;
+    int MemoryCurrentThreshold;
+    bool bMemoryTriggerBelowValue;  // -m or -ml
+    bool bMonitoringGCMemory;       // -gcm
+    int DumpGCGeneration;           // -gcgen
     int ThresholdSeconds;           // -s
     bool bTimerThreshold;           // -s
     int NumberOfDumpsToCollect;     // -n
@@ -118,6 +112,9 @@ struct ProcDumpConfiguration {
     struct TriggerThread Threads[MAX_TRIGGERS];
     struct Handle semAvailableDumpSlots;
     pthread_mutex_t ptrace_mutex;
+    pthread_cond_t dotnetCond;
+    pthread_mutex_t dotnetMutex;
+    bool bSocketInitialized;
 
     // Events
     // use these to mimic WaitForSingleObject/MultibleObjects from WinApi

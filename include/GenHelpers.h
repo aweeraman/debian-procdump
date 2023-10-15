@@ -38,13 +38,24 @@ static inline void cleanup_void(void* val)
 //-------------------------------------------------------------------------------------
 // Auto clean up of file descriptors using close
 //-------------------------------------------------------------------------------------
+#if (__GNUC__ >= 13)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
+#endif
 static inline void cleanup_fd(int* val)
 {
     if (*val)
     {
         close(*val);
     }
+    else
+    {
+        // Make static analyzer happy, otherwise it thinks we leak when *val == 0
+    }
 }
+#if (__GNUC__ >= 13)
+#pragma GCC diagnostic pop
+#endif
 
 //-------------------------------------------------------------------------------------
 // Auto clean up of dir using closedir
@@ -85,6 +96,7 @@ static inline void cancel_pthread(unsigned long* val)
 #define auto_free_file __attribute__ ((__cleanup__(cleanup_file)))
 #define auto_cancel_thread __attribute__ ((__cleanup__(cancel_pthread)))
 
+int* GetSeparatedValues(char* src, char* separator, int* numValues);
 bool ConvertToInt(const char* src, int* conv);
 bool IsValidNumberArg(const char *arg);
 bool CheckKernelVersion();
@@ -98,6 +110,7 @@ bool createDir(const char *dir, mode_t perms);
 char* GetSocketPath(char* prefix, pid_t pid, pid_t targetPid);
 int send_all(int socket, void *buffer, size_t length);
 int recv_all(int socket, void* buffer, size_t length);
+pid_t gettid();
 
 #endif // GENHELPERS_H
 

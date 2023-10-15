@@ -17,6 +17,8 @@ Source0:        %{url}/releases/download/%{version}/%{name}-%{version}.tar.gz
 
 BuildRequires:  gcc, make
 
+%undefine _annotated_build
+
 %if "%{_vendor}" == "debbuild"
 BuildRequires:  zlib1g-dev
 %else
@@ -54,6 +56,26 @@ make CFLAGS="%{optflags}"
 
 
 %changelog
+* Wed Sep 6 2023 Mario Hewardt <marioh@microsoft.com> - 2.2
+- Adds Azure Linux package
+- Fixes memory leaks
+
+* Fri Aug 11 2023 Mario Hewardt <marioh@microsoft.com> - 2.1
+- Fixes bug that can lead to crash in monitored .NET process
+- Adds thread id to profiler tracing
+
+* Wed Jul 26 2023 Mario Hewardt <marioh@microsoft.com> - 2.0
+- -gcm allows you to specify generation or heap (LOH and POH) thresholds.
+- -gcgen allows you to create a dump at the start and end of a GC.
+- Allow multiple thresholds for memory trigger (-m)
+
+* Thu Jun 1 2023 Mario Hewardt <marioh@microsoft.com> - 1.5
+- security hardening
+
+* Fri Mar 3 2023 Mario Hewardt <marioh@microsoft.com> - 1.4.1
+- added the capability to dump on .NET 1st chance exception messages
+- added wildcard support for .NET exception filters
+
 * Mon Dec 12 2022 Mario Hewardt <marioh@microsoft.com> - 1.4
 - added the capability to dump on .NET 1st chance exceptions (-e and -f)
 
