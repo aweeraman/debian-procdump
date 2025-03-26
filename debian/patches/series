@@ -1,2 +1,4 @@
 man-page-improvements.diff
 fix-typo.diff
+Fixes-212-213-214-215.patch
+Add-support-for-additional-.NET-architectures-217.patch
