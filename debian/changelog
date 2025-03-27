@@ -1,3 +1,12 @@
+procdump (2.2-3) unstable; urgency=medium
+
+  * Team upload (salsa.d.o/debian namespace).
+  * Fix build with new make failing to parse tabs in Makefile
+    This should print correctly the architecture now result of
+    "uname -p", and let us fix build failures accordingly
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Thu, 27 Mar 2025 10:33:35 +0100
+
 procdump (2.2-2) unstable; urgency=medium
 
   * Team upload (salsa.d.o/debian namespace).

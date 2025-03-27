@@ -1,0 +1,51 @@
+Description: Fix uname -p usage (reporting unknown in Debian)
+Remove tabs, to avoid a make error such as
+"Makefile:31: *** recipe commences before first target.  Stop."
+Author: Gianfranco Costamagna <locutusofborg@debian.org>
+Last-Update: 2025-03-27
+
+--- procdump-2.2.orig/Makefile
++++ procdump-2.2/Makefile
+@@ -5,30 +5,30 @@ CFLAGS ?= -Wall
+ # ProcDump implements .NET triggers via a .NET Profiler. .NET has a set of
+ # architectures that it supports and we have to make sure we're building on
+ # one of the supported ones below.
+-HOST := $(shell uname -p)
++HOST := $(shell uname -m)
+ 
+ ifeq ($(HOST), $(filter $(HOST), x86_64 amd64))
+-	CLRHOSTDEF := -DHOST_AMD64 -DHOST_64BIT
++    CLRHOSTDEF := -DHOST_AMD64 -DHOST_64BIT
+ else ifeq ($(HOST), $(filter $(HOST), x86 i686))
+-	CLRHOSTDEF := -DHOST_X86
++    CLRHOSTDEF := -DHOST_X86
+ else ifeq ($(HOST), $(filter $(HOST), armv6 armv6l))
+-	CLRHOSTDEF := -DHOST_ARM -DHOST_ARMV6
++    CLRHOSTDEF := -DHOST_ARM -DHOST_ARMV6
+ else ifeq ($(HOST), $(filter $(HOST), arm armv7-a))
+-	CLRHOSTDEF := -DHOST_ARM
++    CLRHOSTDEF := -DHOST_ARM
+ else ifeq ($(HOST), $(filter $(HOST), aarch64 arm64))
+-	CLRHOSTDEF := -DHOST_ARM64 -DHOST_64BIT
++    CLRHOSTDEF := -DHOST_ARM64 -DHOST_64BIT
+ else ifeq ($(HOST), loongarch64)
+-	CLRHOSTDEF := -DHOST_LOONGARCH64 -DHOST_64BIT
++    CLRHOSTDEF := -DHOST_LOONGARCH64 -DHOST_64BIT
+ else ifeq ($(HOST), riscv64)
+-	CLRHOSTDEF := -DHOST_RISCV64 -DHOST_64BIT
++    CLRHOSTDEF := -DHOST_RISCV64 -DHOST_64BIT
+ else ifeq ($(HOST), s390x)
+-	CLRHOSTDEF := -DHOST_S390X -DHOST_64BIT -DBIGENDIAN
++    CLRHOSTDEF := -DHOST_S390X -DHOST_64BIT -DBIGENDIAN
+ else ifeq ($(HOST), mips64)
+-	CLRHOSTDEF := -DHOST_MIPS64 -DHOST_64BIT=1
++    CLRHOSTDEF := -DHOST_MIPS64 -DHOST_64BIT=1
+ else ifeq ($(HOST), ppc64le)
+-	CLRHOSTDEF := -DHOST_POWERPC64 -DHOST_64BIT
++    CLRHOSTDEF := -DHOST_POWERPC64 -DHOST_64BIT
+ else
+-	$(error Unsupported architecture: $(HOST))
++    $(error Unsupported architecture: $(HOST))
+ endif
+ 
+ CCFLAGS=$(CFLAGS) -I ./include -pthread -std=gnu99 -fstack-protector-all -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -O2 -Werror
