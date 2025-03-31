@@ -1,5 +1,6 @@
 Description: Fix missing PLONG_PTR definition for 32 bit architectures
 Author: Gianfranco Costamagna <locutusofborg@debian.org>
+Origin: https://github.com/microsoft/ProcDump-for-Linux/pull/273/commits
 Last-Update: 2025-03-28
 
 Index: procdump/profiler/inc/pal_mstypes.h
