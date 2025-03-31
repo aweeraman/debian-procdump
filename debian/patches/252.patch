@@ -1,0 +1,16 @@
+Description: Adapt upstream PR: #252 to fix armhf detection
+Origin: https://github.com/microsoft/ProcDump-for-Linux/pull/252/files
+Author: Gianfranco Costamagna <locutusofborg@debian.org>
+Last-Update: 2025-03-27
+
+--- procdump-2.2.orig/Makefile
++++ procdump-2.2/Makefile
+@@ -13,7 +13,7 @@ else ifeq ($(HOST), $(filter $(HOST), x8
+     CLRHOSTDEF := -DHOST_X86
+ else ifeq ($(HOST), $(filter $(HOST), armv6 armv6l))
+     CLRHOSTDEF := -DHOST_ARM -DHOST_ARMV6
+-else ifeq ($(HOST), $(filter $(HOST), arm armv7-a))
++else ifeq ($(HOST), $(filter $(HOST), arm armv7-a armv7l))
+     CLRHOSTDEF := -DHOST_ARM
+ else ifeq ($(HOST), $(filter $(HOST), aarch64 arm64))
+     CLRHOSTDEF := -DHOST_ARM64 -DHOST_64BIT
