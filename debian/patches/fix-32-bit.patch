@@ -1,0 +1,18 @@
+Description: Fix missing PLONG_PTR definition for 32 bit architectures
+Author: Gianfranco Costamagna <locutusofborg@debian.org>
+Last-Update: 2025-03-28
+
+Index: procdump/profiler/inc/pal_mstypes.h
+===================================================================
+--- procdump.orig/profiler/inc/pal_mstypes.h
++++ procdump/profiler/inc/pal_mstypes.h
+@@ -503,7 +503,8 @@ UShortToPtr(
+ typedef _W64 __int32 INT_PTR;
+ typedef _W64 unsigned __int32 UINT_PTR;
+ 
+-typedef _W64 __int32 LONG_PTR;
++typedef _W64 __int32 LONG_PTR, *PLONG_PTR;
++
+ typedef _W64 unsigned __int32 ULONG_PTR, *PULONG_PTR;
+ typedef _W64 unsigned __int32 DWORD_PTR, *PDWORD_PTR;
+ 
