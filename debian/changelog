@@ -1,3 +1,11 @@
+procdump (2.2-4) unstable; urgency=medium
+
+  * Team upload (salsa.d.o/debian namespace).
+  * Add patch to fix arm* builds
+  * Add patch to fix 32bit builds
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 28 Mar 2025 20:28:01 +0100
+
 procdump (2.2-3) unstable; urgency=medium
 
   * Team upload (salsa.d.o/debian namespace).

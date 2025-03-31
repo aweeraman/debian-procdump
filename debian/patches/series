@@ -3,3 +3,6 @@ fix-typo.diff
 Fixes-212-213-214-215.patch
 Add-support-for-additional-.NET-architectures-217.patch
 fix-build-various-archs.patch
+252.patch
+fix-32-bit.patch
+add-another-arm.patch
