@@ -5,7 +5,7 @@
 sudo yum install procdump
 ```
 
-## Ubuntu 20.04, 22.04, 23.04
+## Ubuntu 20.04, 22.04, 24.04
 #### 1. Register Microsoft key and feed
 ```sh
 wget -q https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
@@ -21,12 +21,8 @@ sudo apt-get install procdump
 ## Debian 11
 #### 1. Register Microsoft key and feed
 ```sh
-wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.asc.gpg
-sudo mv microsoft.asc.gpg /etc/apt/trusted.gpg.d/
-wget -q https://packages.microsoft.com/config/debian/11/prod.list
-sudo mv prod.list /etc/apt/sources.list.d/microsoft-prod.list
-sudo chown root:root /etc/apt/trusted.gpg.d/microsoft.asc.gpg
-sudo chown root:root /etc/apt/sources.list.d/microsoft-prod.list
+wget -q https://packages.microsoft.com/config/debian/11/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+sudo dpkg -i packages-microsoft-prod.deb
 ```
 
 #### 2. Install Procdump
@@ -40,12 +36,8 @@ sudo apt-get install procdump
 ## Debian 12
 #### 1. Register Microsoft key and feed
 ```sh
-wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.asc.gpg
-sudo mv microsoft.asc.gpg /etc/apt/trusted.gpg.d/
-wget -q https://packages.microsoft.com/config/debian/12/prod.list
-sudo mv prod.list /etc/apt/sources.list.d/microsoft-prod.list
-sudo chown root:root /etc/apt/trusted.gpg.d/microsoft.asc.gpg
-sudo chown root:root /etc/apt/sources.list.d/microsoft-prod.list
+wget -q https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+sudo dpkg -i packages-microsoft-prod.deb
 ```
 
 #### 2. Install Procdump
@@ -56,11 +48,10 @@ sudo apt-get update
 sudo apt-get install procdump
 ```
 
-## Fedora 37
+## Fedora 38
 #### 1. Register Microsoft key and feed
 ```sh
-sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-sudo wget -q -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/fedora/37/prod.repo
+sudo rpm -Uvh https://packages.microsoft.com/config/fedora/38/packages-microsoft-prod.rpm
 ```
 
 #### 2. Install Procdump
@@ -68,11 +59,21 @@ sudo wget -q -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.
 sudo dnf install procdump
 ```
 
-## Fedora 38
+## Fedora 39
 #### 1. Register Microsoft key and feed
 ```sh
-sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-sudo wget -q -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/fedora/38/prod.repo
+sudo rpm -Uvh https://packages.microsoft.com/config/fedora/39/packages-microsoft-prod.rpm
+```
+
+#### 2. Install Procdump
+```sh
+sudo dnf install procdump
+```
+
+## Fedora 40
+#### 1. Register Microsoft key and feed
+```sh
+sudo rpm -Uvh https://packages.microsoft.com/config/fedora/40/packages-microsoft-prod.rpm
 ```
 
 #### 2. Install Procdump
@@ -83,8 +84,7 @@ sudo dnf install procdump
 ## RHEL 7
 #### 1. Register Microsoft key and feed
 ```sh
-sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-sudo wget -q -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/rhel/7/prod.repo
+sudo rpm -Uvh https://packages.microsoft.com/config/rhel/7/packages-microsoft-prod.rpm
 ```
 
 #### 2. Install Procdump
@@ -95,8 +95,7 @@ sudo yum install procdump
 ## RHEL 8
 #### 1. Register Microsoft key and feed
 ```sh
-sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-sudo wget -q -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/rhel/8/prod.repo
+sudo rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm
 ```
 
 #### 2. Install Procdump
@@ -107,8 +106,7 @@ sudo yum install procdump
 ## RHEL 9
 #### 1. Register Microsoft key and feed
 ```sh
-sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-sudo wget -q -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/rhel/9/prod.repo
+sudo rpm -Uvh https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
 ```
 
 #### 2. Install Procdump
@@ -163,3 +161,16 @@ sudo rpm -Uvh https://packages.microsoft.com/config/sles/15/packages-microsoft-p
 ```sh
 sudo zypper install procdump
 ```
+
+## macOS
+To install ProcDump for Mac, you'll need to install [Homebrew](https://brew.sh) if you haven't already.
+
+1. Add the Sysinternals tap:
+   ```bash
+   brew tap Microsoft/sysinternalstap
+   ```
+   
+1. Install ProcDump:
+   ```bash
+   brew install procdump
+   ```

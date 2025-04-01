@@ -13,7 +13,7 @@ long HZ;                                                        // clock ticks p
 int MAXIMUM_CPU;                                                // maximum cpu usage percentage (# cores * 100)
 struct ProcDumpConfiguration g_config;                          // backbone of the program
 struct ProcDumpConfiguration * target_config;                   // list of configs for target group processes or matching names
-extern pthread_mutex_t queue_mutex;
+extern pthread_mutex_t activeConfigurationsMutex;
 
 sigset_t sig_set;
 
@@ -38,6 +38,11 @@ void ApplyDefaults(struct ProcDumpConfiguration *self)
     {
         self->PollingInterval = MIN_POLLING_INTERVAL;
     }
+
+    if(self->SampleRate == 0)
+    {
+        self->SampleRate = DEFAULT_SAMPLE_RATE;
+    }
 }
 
 //--------------------------------------------------------------------
@@ -48,14 +53,14 @@ void ApplyDefaults(struct ProcDumpConfiguration *self)
 void InitProcDump()
 {
     openlog("ProcDump", LOG_PID, LOG_USER);
-    if(CheckKernelVersion() == false)
+    if(CheckKernelVersion(MIN_KERNEL_VERSION, MIN_KERNEL_PATCH) == false)
     {
-        Log(error, "Kernel version lower than 3.5+.");
+        Log(error, "ProcDump requires kernel version %d.%d+.", MIN_KERNEL_VERSION, MIN_KERNEL_PATCH);
         exit(-1);
     }
     InitProcDumpConfiguration(&g_config);
     pthread_mutex_init(&LoggerLock, NULL);
-    pthread_mutex_init(&queue_mutex, NULL);
+    pthread_mutex_init(&activeConfigurationsMutex, NULL);
 
     sigemptyset (&sig_set);
     sigaddset (&sig_set, SIGINT);
@@ -74,7 +79,7 @@ void InitProcDump()
     else
     {
         int len = strlen(prefixTmpFolder) + strlen("/procdump") + 1;
-        char* t = malloc(len);
+        char* t = (char*) malloc(len);
         if(t == NULL)
         {
             Log(error, INTERNAL_ERROR);
@@ -82,7 +87,7 @@ void InitProcDump()
             exit(-1);
         }
 
-        sprintf(t, "%s%s", prefixTmpFolder, "/procdump");
+        snprintf(t, len, "%s%s", prefixTmpFolder, "/procdump");
         createDir(t, 0777);
         free(t);
     }
@@ -99,8 +104,10 @@ void ExitProcDump()
     pthread_mutex_destroy(&LoggerLock);
     closelog();
 
-    // Try to delete the profiler lib in case it was left over...
+    // Try to delete the profiler lib and restrack program in case
+    // they were left over...
     unlink(PROCDUMP_DIR "/" PROFILER_FILE_NAME);
+
     Trace("ExitProcDump: Exit");
 }
 
@@ -114,29 +121,35 @@ void InitProcDumpConfiguration(struct ProcDumpConfiguration *self)
     MAXIMUM_CPU = 100 * (int)sysconf(_SC_NPROCESSORS_ONLN);
     HZ = sysconf(_SC_CLK_TCK);
 
+#ifdef __linux__
     sysinfo(&(self->SystemInfo));
+#endif
 
+#ifdef __linux__
     pthread_mutex_init(&self->ptrace_mutex, NULL);
+    pthread_mutex_init(&self->memAllocMapMutex, NULL);
+#endif
 
-    InitNamedEvent(&(self->evtCtrlHandlerCleanupComplete.event), true, false, "CtrlHandlerCleanupComplete");
+    InitNamedEvent(&(self->evtCtrlHandlerCleanupComplete.event), true, false, const_cast<char*>("CtrlHandlerCleanupComplete"));
     self->evtCtrlHandlerCleanupComplete.type = EVENT;
 
-    InitNamedEvent(&(self->evtBannerPrinted.event), true, false, "BannerPrinted");
+    InitNamedEvent(&(self->evtBannerPrinted.event), true, false, const_cast<char*>("BannerPrinted"));
     self->evtBannerPrinted.type = EVENT;
 
-    InitNamedEvent(&(self->evtConfigurationPrinted.event), true, false, "ConfigurationPrinted");
+    InitNamedEvent(&(self->evtConfigurationPrinted.event), true, false, const_cast<char*>("ConfigurationPrinted"));
     self->evtConfigurationPrinted.type = EVENT;
 
-    InitNamedEvent(&(self->evtDebugThreadInitialized.event), true, false, "DebugThreadInitialized");
+    InitNamedEvent(&(self->evtDebugThreadInitialized.event), true, false, const_cast<char*>("DebugThreadInitialized"));
     self->evtDebugThreadInitialized.type = EVENT;
 
-    InitNamedEvent(&(self->evtQuit.event), true, false, "Quit");
+    InitNamedEvent(&(self->evtQuit.event), true, false, const_cast<char*>("Quit"));
     self->evtQuit.type = EVENT;
 
-    InitNamedEvent(&(self->evtStartMonitoring.event), true, false, "StartMonitoring");
+    InitNamedEvent(&(self->evtStartMonitoring.event), true, false, const_cast<char*>("StartMonitoring"));
     self->evtStartMonitoring.type = EVENT;
 
-    sem_init(&(self->semAvailableDumpSlots.semaphore), 0, 1);
+    //sem_init(&(self->semAvailableDumpSlots.semaphore), 0, 1);
+    self->semAvailableDumpSlots.semaphore = sem_open("/procdump_sem", O_CREAT, 0644, 1);
     self->semAvailableDumpSlots.type = SEMAPHORE;
 
     // Additional initialization
@@ -144,6 +157,7 @@ void InitProcDumpConfiguration(struct ProcDumpConfiguration *self)
     self->bProcessGroup =               false;
     self->ProcessGroup =                NO_PID;
     self->NumberOfDumpsCollected =      0;
+    self->NumberOfLeakReportsCollected = 0;
     self->NumberOfDumpsToCollect =      -1;
     self->CpuThreshold =                -1;
     self->bCpuTriggerBelowValue =       false;
@@ -154,20 +168,27 @@ void InitProcDumpConfiguration(struct ProcDumpConfiguration *self)
     self->DumpGCGeneration =            -1;
     self->ThreadThreshold =             -1;
     self->FileDescriptorThreshold =     -1;
-    self->SignalNumber =                -1;
+    self->SignalNumber =                NULL;
+    self->SignalCount =                 0;
     self->ThresholdSeconds =            -1;
     self->bMemoryTriggerBelowValue =    false;
     self->bTimerThreshold =             false;
     self->WaitingForProcessName =       false;
-    self->DiagnosticsLoggingEnabled =   false;
+    self->DiagnosticsLoggingEnabled =   none;
     self->gcorePid =                    NO_PID;
     self->PollingInterval =             -1;
     self->CoreDumpPath =                NULL;
     self->CoreDumpName =                NULL;
     self->nQuit =                       0;
     self->bDumpOnException =            false;
-    self->bDumpOnException =            NULL;
+    self->bDumpOnException =            false;
     self->ExceptionFilter =             NULL;
+    self->ExcludeFilter =               NULL;
+    self->bRestrackEnabled =            false;
+    self->bRestrackGenerateDump =       true;
+    self->bLeakReportInProgress =       false;
+    self->SampleRate =                  0;
+    self->CoreDumpMask =                -1;
 
     self->socketPath =                  NULL;
     self->statusSocket =                -1;
@@ -176,6 +197,13 @@ void InitProcDumpConfiguration(struct ProcDumpConfiguration *self)
     self->bExitProcessMonitor =         false;
     pthread_mutex_init(&self->dotnetMutex, NULL);
     pthread_cond_init(&self->dotnetCond, NULL);
+
+#ifdef __linux__
+    if(self->memAllocMap.size() > 0)
+    {
+        self->memAllocMap.clear();
+    }
+#endif
 }
 
 //--------------------------------------------------------------------
@@ -194,7 +222,13 @@ void FreeProcDumpConfiguration(struct ProcDumpConfiguration *self)
     DestroyEvent(&(self->evtStartMonitoring.event));
 
     pthread_mutex_destroy(&self->ptrace_mutex);
-    sem_destroy(&(self->semAvailableDumpSlots.semaphore));
+#ifdef __linux__
+    pthread_mutex_destroy(&self->memAllocMapMutex);
+#endif
+    //sem_destroy(&(self->semAvailableDumpSlots.semaphore));
+    sem_close(self->semAvailableDumpSlots.semaphore);
+    sem_unlink("/procdump_sem");
+
 
     pthread_mutex_destroy(&self->dotnetMutex);
     pthread_cond_destroy(&self->dotnetCond);
@@ -224,6 +258,12 @@ void FreeProcDumpConfiguration(struct ProcDumpConfiguration *self)
         self->ExceptionFilter = NULL;
     }
 
+    if(self->ExcludeFilter)
+    {
+        free(self->ExcludeFilter);
+        self->ExcludeFilter = NULL;
+    }
+
     if(self->CoreDumpPath)
     {
         free(self->CoreDumpPath);
@@ -242,6 +282,23 @@ void FreeProcDumpConfiguration(struct ProcDumpConfiguration *self)
         self->MemoryThreshold = NULL;
     }
 
+    if(self->SignalNumber)
+    {
+        free(self->SignalNumber);
+        self->SignalNumber = NULL;
+    }
+
+#ifdef __linux__
+    for (const auto& pair : self->memAllocMap)
+    {
+        if(pair.second)
+        {
+            free(pair.second);
+        }
+    }
+    self->memAllocMap.clear();
+#endif
+
     Trace("FreeProcDumpConfiguration: Exit");
 }
 
@@ -253,7 +310,7 @@ void FreeProcDumpConfiguration(struct ProcDumpConfiguration *self)
 //--------------------------------------------------------------------
 struct ProcDumpConfiguration * CopyProcDumpConfiguration(struct ProcDumpConfiguration *self)
 {
-    struct ProcDumpConfiguration * copy = (struct ProcDumpConfiguration*)malloc(sizeof(struct ProcDumpConfiguration));
+    struct ProcDumpConfiguration * copy = new ProcDumpConfiguration();
 
     if(copy != NULL)
     {
@@ -271,6 +328,7 @@ struct ProcDumpConfiguration * CopyProcDumpConfiguration(struct ProcDumpConfigur
         // copy runtime values from original config
         copy->NumberOfDumpsCollecting = self->NumberOfDumpsCollecting;
         copy->NumberOfDumpsCollected = self->NumberOfDumpsCollected;
+        copy->NumberOfLeakReportsCollected = self->NumberOfLeakReportsCollected;
         copy->bTerminated = self->bTerminated;
 
         // copy trigger behavior from original config
@@ -285,7 +343,7 @@ struct ProcDumpConfiguration * CopyProcDumpConfiguration(struct ProcDumpConfigur
         {
             copy->NumberOfDumpsToCollect = self->NumberOfDumpsToCollect;
             copy->MemoryCurrentThreshold = self->MemoryCurrentThreshold;
-            copy->MemoryThreshold = malloc(self->NumberOfDumpsToCollect*sizeof(int));
+            copy->MemoryThreshold = (int*) malloc(self->NumberOfDumpsToCollect*sizeof(int));
             if(copy->MemoryThreshold == NULL)
             {
                 Trace("Failed to alloc memory for MemoryThreshold");
@@ -300,6 +358,11 @@ struct ProcDumpConfiguration * CopyProcDumpConfiguration(struct ProcDumpConfigur
             memcpy(copy->MemoryThreshold, self->MemoryThreshold, self->NumberOfDumpsToCollect*sizeof(int));
         }
 
+        copy->bRestrackEnabled = self->bRestrackEnabled;
+        copy->bRestrackGenerateDump = self->bRestrackGenerateDump;
+        copy->bLeakReportInProgress = self->bLeakReportInProgress;
+        copy->SampleRate = self->SampleRate;
+        copy->CoreDumpMask = self->CoreDumpMask;
         copy->bMemoryTriggerBelowValue = self->bMemoryTriggerBelowValue;
         copy->MemoryThresholdCount = self->MemoryThresholdCount;
         copy->bMonitoringGCMemory = self->bMonitoringGCMemory;
@@ -311,15 +374,41 @@ struct ProcDumpConfiguration * CopyProcDumpConfiguration(struct ProcDumpConfigur
         copy->DiagnosticsLoggingEnabled = self->DiagnosticsLoggingEnabled;
         copy->ThreadThreshold = self->ThreadThreshold;
         copy->FileDescriptorThreshold = self->FileDescriptorThreshold;
-        copy->SignalNumber = self->SignalNumber;
+
+        if(self->SignalNumber != NULL)
+        {
+            copy->SignalCount = self->SignalCount;
+            copy->SignalNumber = (int*) malloc(self->SignalCount*sizeof(int));
+            if(copy->SignalNumber == NULL)
+            {
+                Trace("Failed to alloc memory for SignalNumber");
+                if(copy->ProcessName)
+                {
+                    free(copy->ProcessName);
+                }
+
+                if(copy->MemoryThreshold)
+                {
+                    free(copy->MemoryThreshold);
+                }
+
+                return NULL;
+            }
+
+            memcpy(copy->SignalNumber, self->SignalNumber, self->SignalCount*sizeof(int));
+        }
+
         copy->PollingInterval = self->PollingInterval;
         copy->CoreDumpPath = self->CoreDumpPath == NULL ? NULL : strdup(self->CoreDumpPath);
         copy->CoreDumpName = self->CoreDumpName == NULL ? NULL : strdup(self->CoreDumpName);
         copy->ExceptionFilter = self->ExceptionFilter == NULL ? NULL : strdup(self->ExceptionFilter);
+        copy->ExcludeFilter = self->ExcludeFilter == NULL ? NULL : strdup(self->ExcludeFilter);
         copy->socketPath = self->socketPath == NULL ? NULL : strdup(self->socketPath);
         copy->bDumpOnException = self->bDumpOnException;
         copy->statusSocket = self->statusSocket;
-
+#ifdef __linux__
+        copy->memAllocMap = self->memAllocMap;
+#endif
         return copy;
     }
     else
@@ -378,7 +467,7 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
                     0 == strcasecmp( argv[i], "-ml" ))
         {
             if( i+1 >= argc || self->MemoryThresholdCount != -1 ) return PrintUsage();
-            self->MemoryThreshold = GetSeparatedValues(argv[i+1], ",", &self->MemoryThresholdCount);
+            self->MemoryThreshold = GetSeparatedValues(argv[i+1], const_cast<char*>(","), &self->MemoryThresholdCount);
 
             if(self->MemoryThreshold == NULL || self->MemoryThresholdCount == 0) return PrintUsage();
 
@@ -399,6 +488,7 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
 
             i++;
         }
+#ifdef __linux__
         else if( 0 == strcasecmp( argv[i], "/gcm" ) ||
                     0 == strcasecmp( argv[i], "-gcm" ))
         {
@@ -441,7 +531,7 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
                         return PrintUsage();
                     }
 
-                    self->MemoryThreshold = GetSeparatedValues(token, ",", &self->MemoryThresholdCount);
+                    self->MemoryThreshold = GetSeparatedValues(token, const_cast<char*>(","), &self->MemoryThresholdCount);
                 }
                 else
                 {
@@ -454,7 +544,7 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
             else
             {
                 self->DumpGCGeneration = CUMULATIVE_GC_SIZE;        // Indicates that we want to check against total managed heap size (across all generations)
-                self->MemoryThreshold = GetSeparatedValues(argv[i+1], ",", &self->MemoryThresholdCount);
+                self->MemoryThreshold = GetSeparatedValues(argv[i+1], const_cast<char*>(","), &self->MemoryThresholdCount);
             }
 
             for(int i = 0; i < self->MemoryThresholdCount; i++)
@@ -493,6 +583,76 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
             dotnetTriggerCount++;
             i++;
         }
+        else if( 0 == strcasecmp( argv[i], "/restrack" ) ||
+                    0 == strcasecmp( argv[i], "-restrack" ))
+        {
+            if(CheckKernelVersion(MIN_RESTRACK_KERNEL_VERSION, MIN_RESTRACK_KERNEL_PATCH) == false)
+            {
+                Log(error, "Restrack requires kernel version %d.%d+.", MIN_RESTRACK_KERNEL_VERSION, MIN_RESTRACK_KERNEL_PATCH);
+                return PrintUsage();
+            }
+
+            if( i+1 >= argc)
+            {
+                return PrintUsage();
+            }
+
+            if(strcasecmp(argv[i+1], "nodump") == 0 )
+            {
+                self->bRestrackGenerateDump = false;
+                i++;
+            }
+
+            self->bRestrackEnabled = true;
+        }
+        else if( 0 == strcasecmp( argv[i], "/sr" ) ||
+                    0 == strcasecmp( argv[i], "-sr" ))
+        {
+            if( i+1 >= argc  ) return PrintUsage();
+            if(!ConvertToInt(argv[i+1], &self->SampleRate)) return PrintUsage();
+            if(self->SampleRate < 0)
+            {
+                Log(error, "Invalid sample rate specified.");
+                return PrintUsage();
+            }
+
+            i++;
+        }
+        else if( 0 == strcasecmp( argv[i], "/sig" ) ||
+                    0 == strcasecmp( argv[i], "-sig" ))
+        {
+            if( i+1 >= argc || self->SignalCount != 0 ) return PrintUsage();
+            self->SignalNumber = GetSeparatedValues(argv[i+1], const_cast<char*>(","), &self->SignalCount);
+
+            if(self->SignalNumber == NULL || self->SignalCount == 0) return PrintUsage();
+
+            for(int i = 0; i < self->SignalCount; i++)
+            {
+                if(self->SignalNumber[i] < 0)
+                {
+                    Log(error, "Invalid signal specified.");
+                    free(self->SignalNumber);
+                    return PrintUsage();
+                }
+            }
+
+            i++;
+        }
+        else if( 0 == strcasecmp( argv[i], "/mc" ) ||
+                    0 == strcasecmp( argv[i], "-mc" ))
+        {
+            if( i+1 >= argc || self->CoreDumpMask != -1 ) return PrintUsage();
+
+            if(ConvertToIntHex(argv[i+1], &self->CoreDumpMask) == false) return PrintUsage();
+            if(self->CoreDumpMask < 0)
+            {
+                Log(error, "Invalid core dump mask specified.");
+                return PrintUsage();
+            }
+
+            i++;
+        }
+#endif
         else if( 0 == strcasecmp( argv[i], "/tc" ) ||
                     0 == strcasecmp( argv[i], "-tc" ))
         {
@@ -514,19 +674,6 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
             if(self->FileDescriptorThreshold < 0)
             {
                 Log(error, "Invalid file descriptor threshold count specified.");
-                return PrintUsage();
-            }
-
-            i++;
-        }
-        else if( 0 == strcasecmp( argv[i], "/sig" ) ||
-                    0 == strcasecmp( argv[i], "-sig" ))
-        {
-            if( i+1 >= argc || self->SignalNumber != -1 ) return PrintUsage();
-            if(!ConvertToInt(argv[i+1], &self->SignalNumber)) return PrintUsage();
-            if(self->SignalNumber < 0)
-            {
-                Log(error, "Invalid signal specified.");
                 return PrintUsage();
             }
 
@@ -580,8 +727,25 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         else if( 0 == strcasecmp( argv[i], "/log" ) ||
                     0 == strcasecmp( argv[i], "-log" ))
         {
-            self->DiagnosticsLoggingEnabled = true;
+            if( i+1 >= argc) return PrintUsage();
+
+            if( 0 == strcasecmp( argv[i+1], "stdout" ) )
+            {
+                self->DiagnosticsLoggingEnabled = diag_stdout;
+            }
+            else if( 0 == strcasecmp( argv[i+1], "syslog" ) )
+            {
+                self->DiagnosticsLoggingEnabled = diag_syslog;
+            }
+            else
+            {
+                Log(error, "Invalid diagnostics stream specified.");
+                return PrintUsage();
+            }
+
+            i++;
         }
+#ifdef __linux__
         else if( 0 == strcasecmp( argv[i], "/e" ) ||
                     0 == strcasecmp( argv[i], "-e" ))
         {
@@ -617,7 +781,30 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
 
             i++;
         }
+        else if( 0 == strcasecmp( argv[i], "/fx" ) ||
+                   0 == strcasecmp( argv[i], "-fx" ))
+        {
+            if( i+1 >= argc || self->ExcludeFilter)
+            {
+                if(self->ExcludeFilter)
+                {
+                    free(self->ExcludeFilter);
+                }
 
+                return PrintUsage();
+            }
+
+            self->ExcludeFilter = strdup(argv[i+1]);
+            if(self->ExcludeFilter==NULL)
+            {
+                Log(error, INTERNAL_ERROR);
+                Trace("GetOptions: failed to strdup ExcludeFilter");
+                return -1;
+            }
+
+            i++;
+        }
+#endif
         else if( 0 == strcasecmp( argv[i], "/o" ) ||
                     0 == strcasecmp( argv[i], "-o" ))
         {
@@ -628,11 +815,13 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         {
             self->WaitingForProcessName = true;
         }
+#ifdef __linux__
         else if( 0 == strcasecmp( argv[i], "/pgid" ) ||
                     0 == strcasecmp( argv[i], "-pgid" ))
         {
             self->bProcessGroup = true;
         }
+#endif
         else
         {
             // Process targets
@@ -747,12 +936,14 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
     // Validate multi arguments
     //
 
+#ifdef __linux__
     // .NET triggers are mutually exclusive
     if(dotnetTriggerCount > 1)
     {
         Log(error, "Only one .NET trigger can be specified.");
         return PrintUsage();
     }
+#endif
 
     // Ensure consistency between number of thresholds specified and the -n switch
     if(self->MemoryThresholdCount > 1 && self->NumberOfDumpsToCollect != -1)
@@ -761,11 +952,12 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         return PrintUsage();
     }
 
-    if(self->MemoryThresholdCount != -1)
+    if(self->MemoryThresholdCount > 1)
     {
         self->NumberOfDumpsToCollect = self->MemoryThresholdCount;
     }
 
+#ifdef __linux__
     // If exception filter is provided with no -e switch exit
     if((self->ExceptionFilter && self->bDumpOnException == false))
     {
@@ -773,6 +965,21 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         return PrintUsage();
     }
 
+    // If sample rate is specified it also requires restrack
+    if((self->SampleRate > 0 && self->bRestrackEnabled == false))
+    {
+        Log(error, "Please use the -restrack switch when specifying a sample rate (-samplerate)");
+        return PrintUsage();
+    }
+
+
+    // Make sure exclude filter is provided with switches that supports exclusion.
+    if((self->ExcludeFilter && self->bRestrackEnabled == false))
+    {
+        Log(error, "Please use the -restrack switch when specifying an exclude filter (-fx)");
+        return PrintUsage();
+    }
+#endif
     // If no path was provided, assume the current directory
     if (self->CoreDumpPath == NULL) {
         self->CoreDumpPath = strdup(".");
@@ -797,13 +1004,15 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         (self->MemoryThreshold == NULL) &&
         (self->ThreadThreshold == -1) &&
         (self->FileDescriptorThreshold == -1) &&
-        (self->DumpGCGeneration == -1))
+        (self->DumpGCGeneration == -1) &&
+        (self->SignalCount == 0))
     {
         self->bTimerThreshold = true;
     }
 
+#ifdef __linux__
     // Signal trigger can only be specified alone
-    if(self->SignalNumber != -1 || self->bDumpOnException)
+    if(self->SignalCount > 0 || self->bDumpOnException)
     {
         if(self->CpuThreshold != -1 || self->ThreadThreshold != -1 || self->FileDescriptorThreshold != -1 || self->MemoryThreshold != NULL)
         {
@@ -820,7 +1029,7 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
         // be attached via ptrace.
         self->bTimerThreshold = false;
     }
-
+#endif
     // If we are monitoring multiple process, setting dump name doesn't make sense (path is OK)
     if ((self->bProcessGroup || self->WaitingForProcessName) && self->CoreDumpName)
     {
@@ -832,7 +1041,6 @@ int GetOptions(struct ProcDumpConfiguration *self, int argc, char *argv[])
     ApplyDefaults(self);
 
     Trace("GetOpts and initial Configuration finished");
-
     return 0;
 }
 
@@ -845,7 +1053,7 @@ bool PrintConfiguration(struct ProcDumpConfiguration *self)
 {
     if (WaitForSingleObject(&self->evtConfigurationPrinted,0) == WAIT_TIMEOUT)
     {
-        if(self->SignalNumber != -1)
+        if(self->SignalCount > 0)
         {
             printf("** NOTE ** Signal triggers use PTRACE which will impact the performance of the target process\n\n");
         }
@@ -935,10 +1143,60 @@ bool PrintConfiguration(struct ProcDumpConfiguration *self)
             printf("%-40s%s\n", "File Descriptor Threshold:", "n/a");
         }
 
-        // Signal
-        if (self->SignalNumber != -1)
+#ifdef __linux__
+        // GC Generation
+        if (self->DumpGCGeneration != -1)
         {
-            printf("%-40s%d\n", "Signal:", self->SignalNumber);
+            printf("%-40s", "GC Generation/heap:");
+
+            if(self->DumpGCGeneration == CUMULATIVE_GC_SIZE)
+            {
+                printf("Cumulative\n");
+            }
+            else if(self->DumpGCGeneration == 3)
+            {
+                printf("LOH\n");
+            }
+            else if(self->DumpGCGeneration == 4)
+            {
+                printf("POH\n");
+            }
+            else
+            {
+                printf("%d\n", self->DumpGCGeneration);
+            }
+        }
+        else
+        {
+            printf("%-40s%s\n", "GC Generation:", "n/a");
+        }
+        // Restrack
+        if (self->bRestrackEnabled == true)
+        {
+            printf("%-40s%s\n", "Resource tracking:", "On");
+            printf("%-40s%d\n", "Resource tracking sample rate:", self->SampleRate);
+        }
+        else
+        {
+            printf("%-40s%s\n", "Resource tracking:", "n/a");
+            printf("%-40s%s\n", "Resource tracking sample rate:", "n/a");
+        }
+        // Signal
+        if (self->SignalCount > 0)
+        {
+            printf("%-40s", "Signal(s):");
+            for(int i=0; i<self->SignalCount; i++)
+            {
+                printf("%d", self->SignalNumber[i]);
+                if(i < self->SignalCount -1)
+                {
+                    printf(",");
+                }
+                else
+                {
+                    printf("\n");
+                }
+            }
         }
         else
         {
@@ -947,22 +1205,19 @@ bool PrintConfiguration(struct ProcDumpConfiguration *self)
         // Exception
         if (self->bDumpOnException)
         {
-            printf("%-40s%s\n", "Exception monitor", "On");
-            printf("%-40s%s\n", "Exception filter", self->ExceptionFilter);
+            printf("%-40s%s\n", "Exception monitor:", "On");
+            printf("%-40s%s\n", "Exception filter:", self->ExceptionFilter ? self->ExceptionFilter : "n/a");
         }
         else
         {
-            printf("%-40s%s\n", "Exception monitor", "n/a");
+            printf("%-40s%s\n", "Exception monitor:", "n/a");
         }
-        // GC Generation
-        if (self->DumpGCGeneration != -1)
+        // Exclude filter
+        if (self->ExcludeFilter)
         {
-            printf("%-40s%d\n", "GC Generation", self->DumpGCGeneration);
+            printf("%-40s%s\n", "Exclude filter:", self->ExcludeFilter);
         }
-        else
-        {
-            printf("%-40s%s\n", "GC Generation", "n/a");
-        }
+#endif
 
         // Polling inverval
         printf("%-40s%d\n", "Polling Interval (ms):", self->PollingInterval);
@@ -994,8 +1249,8 @@ bool PrintConfiguration(struct ProcDumpConfiguration *self)
 //--------------------------------------------------------------------
 void PrintBanner()
 {
-    printf("\nProcDump v2.2 - Sysinternals process dump utility\n");
-    printf("Copyright (C) 2023 Microsoft Corporation. All rights reserved. Licensed under the MIT license.\n");
+    printf("\nProcDump v%s - Sysinternals process dump utility\n", STRFILEVER);
+    printf("Copyright (C) 2025 Microsoft Corporation. All rights reserved. Licensed under the MIT license.\n");
     printf("Mark Russinovich, Mario Hewardt, John Salem, Javid Habibi\n");
     printf("Sysinternals - www.sysinternals.com\n\n");
 
@@ -1016,18 +1271,28 @@ int PrintUsage()
     printf("            [-s Seconds]\n");
     printf("            [-c|-cl CPU_Usage]\n");
     printf("            [-m|-ml Commit_Usage1[,Commit_Usage2...]]\n");
-    printf("            [-gcm [<GCGeneration>: | LOH: | POH:]Memory_Usage1[,Memory_Usage2...]]\n");
-    printf("            [-gcgen Generation\n");
     printf("            [-tc Thread_Threshold]\n");
     printf("            [-fc FileDescriptor_Threshold]\n");
-    printf("            [-sig Signal_Number]\n");
+#ifdef __linux__
+    printf("            [-gcm [<GCGeneration>: | LOH: | POH:]Memory_Usage1[,Memory_Usage2...]]\n");
+    printf("            [-gcgen Generation]\n");
+    printf("            [-restrack [nodump]]\n");
+    printf("            [-sr Sample_Rate]\n");
+    printf("            [-sig Signal_Number1[,Signal_Number2...]]\n");
     printf("            [-e]\n");
     printf("            [-f Include_Filter,...]\n");
+    printf("            [-fx Exclude_Filter]\n");
+    printf("            [-mc Custom_Dump_Mask]\n");
+#endif
     printf("            [-pf Polling_Frequency]\n");
     printf("            [-o]\n");
-    printf("            [-log]\n");
+    printf("            [-log syslog|stdout]\n");
     printf("            {\n");
+#ifdef __linux__
     printf("             {{[-w] Process_Name | [-pgid] PID} [Dump_File | Dump_Folder]}\n");
+#elif defined(__APPLE__)
+    printf("             {{[-w] Process_Name | PID} [Dump_File | Dump_Folder]}\n");
+#endif
     printf("            }\n");
     printf("\n");
     printf("Options:\n");
@@ -1035,20 +1300,26 @@ int PrintUsage()
     printf("   -s      Consecutive seconds before dump is written (default is 10).\n");
     printf("   -c      CPU threshold above which to create a dump of the process.\n");
     printf("   -cl     CPU threshold below which to create a dump of the process.\n");
+    printf("   -tc     Thread count threshold above which to create a dump of the process.\n");
+    printf("   -fc     File descriptor count threshold above which to create a dump of the process.\n");
+#ifdef __linux__
     printf("   -m      Memory commit threshold(s) (MB) above which to create dumps.\n");
     printf("   -ml     Memory commit threshold(s) (MB) below which to create dumps.\n");
     printf("   -gcm    [.NET] GC memory threshold(s) (MB) above which to create dumps for the specified generation or heap (default is total .NET memory usage).\n");
     printf("   -gcgen  [.NET] Create dump when the garbage collection of the specified generation starts and finishes.\n");
-    printf("   -tc     Thread count threshold above which to create a dump of the process.\n");
-    printf("   -fc     File descriptor count threshold above which to create a dump of the process.\n");
-    printf("   -sig    Signal number to intercept to create a dump of the process.\n");
+    printf("   -restrack Enable memory leak tracking (malloc family of APIs). Use the nodump option to prevent dump generation and only produce restrack report(s).\n");
+    printf("   -sr     Sample rate when using -restrack.\n");
+    printf("   -sig    Comma separated list of signal number(s) during which any signal results in a dump of the process.\n");
     printf("   -e      [.NET] Create dump when the process encounters an exception.\n");
-    printf("   -f      [.NET] Filter (include) on the (comma seperated) exception name(s) and exception messages(s). Supports wildcards.\n");
+    printf("   -f      Filter (include) on the content of .NET exceptions (comma separated). Wildcards (*) are supported.\n");
+    printf("   -fx     Filter (exclude) on the content of -restrack call stacks. Wildcards (*) are supported.\n");
+    printf("   -mc     Custom core dump mask (in hex) indicating what memory should be included in the core dump. Please see 'man core' (/proc/[pid]/coredump_filter) for available options.\n");
+    printf("   -pgid   Process ID specified refers to a process group ID.\n");
+#endif
     printf("   -pf     Polling frequency.\n");
     printf("   -o      Overwrite existing dump file.\n");
-    printf("   -log    Writes extended ProcDump tracing to syslog.\n");
+    printf("   -log    Writes extended ProcDump tracing to the specified output stream (syslog or stdout).\n");
     printf("   -w      Wait for the specified process to launch if it's not running.\n");
-    printf("   -pgid   Process ID specified refers to a process group ID.\n");
 
     return -1;
 }

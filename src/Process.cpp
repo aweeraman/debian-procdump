@@ -7,24 +7,70 @@
 //
 //--------------------------------------------------------------------
 #include "Includes.h"
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+
+#ifdef __APPLE__
+#include <libproc.h>
+#include <mach/mach_time.h>
+#include <sys/sysctl.h>
+#endif
+
+extern long HZ;
 
 //--------------------------------------------------------------------
 //
-// GetProcessStat - Gets the process stats for the given pid
+// GetUids - Gets the process uids for the given pid
 //
 //--------------------------------------------------------------------
-bool GetProcessStat(pid_t pid, struct ProcessStat *proc) {
-    char procFilePath[32];
-    char fileBuffer[1024];
-    char *token;
-    char *savePtr = NULL;
-    struct dirent* entry = NULL;
+bool GetUids(pid_t pid, struct ProcessStat* proc)
+{
 
-    auto_free_file FILE *procFile = NULL;
+    std::ostringstream path;
+    path << "/proc/" << pid << "/status";
+
+    std::ifstream statusFile(path.str());
+    if (!statusFile.is_open())
+    {
+        Log(error, "Failed to open status file for pid: %d", pid);
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(statusFile, line))
+    {
+        if (line.find("Uid:") == 0)
+        {
+            std::istringstream iss(line);
+            std::string uidTag, realUid, effectiveUid, savedUid, fsUid;
+            iss >> uidTag >> realUid >> effectiveUid >> savedUid >> fsUid;
+            proc->real_uid = std::stoi(realUid);
+            proc->effective_uid = std::stoi(effectiveUid);
+            proc->saved_uid = std::stoi(savedUid);
+            proc->fs_uid = std::stoi(fsUid);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+//--------------------------------------------------------------------
+//
+// GetNumFileDescriptors - Gets the process stats for the given pid
+//
+//--------------------------------------------------------------------
+bool GetNumFileDescriptors(pid_t pid, struct ProcessStat* proc)
+{
+#ifdef __linux__
     auto_free_dir DIR* fddir = NULL;
+    struct dirent* entry = NULL;
+    char procFilePath[32];
 
-    // Get number of file descriptors in /proc/%d/fdinfo. This directory only contains sub directories for each file descriptor.
-    if(sprintf(procFilePath, "/proc/%d/fdinfo", pid) < 0){
+    if(sprintf(procFilePath, "/proc/%d/fdinfo", pid) < 0)
+    {
         return false;
     }
 
@@ -39,14 +85,94 @@ bool GetProcessStat(pid_t pid, struct ProcessStat *proc) {
     }
     else
     {
-        Log(error, "Failed to open %s. Exiting...", procFilePath);
+        Log(error, "Failed to open %s [%s]", procFilePath, strerror(errno));
         return false;
 
     }
 
     proc->num_filedescriptors-=2;                   // Account for "." and ".."
+#elif __APPLE__
+    int size = size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, NULL, 0);
+    if (size <= 0) 
+    {
+        Trace("[GetNumFileDescriptors] Failed to get required size for process information for pid: %d", pid);
+        return false;
+    }
 
+    struct proc_fdinfo* fdInfo = (struct proc_fdinfo *)malloc(size);
+    if (fdInfo == NULL) 
+    {
+        Trace("[GetNumFileDescriptors] Failed to alloc mem");        
+        return -1;
+    }
 
+    int ret = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, fdInfo, size);
+    if (ret <= 0) 
+    {
+        Trace("[GetNumFileDescriptors] Failed to get process information for pid: %d", pid);
+        free(fdInfo);
+        return false;
+    } 
+
+    proc->num_filedescriptors = ret/sizeof(struct proc_fdinfo);
+
+    free(fdInfo);
+#endif
+    return true;
+}
+
+#ifdef __APPLE__
+bool GetTaskInfo(struct proc_taskallinfo* taskInfo, pid_t pid)
+{
+    int ret = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, taskInfo, sizeof(struct proc_taskallinfo));
+    if (ret <= 0) 
+    {
+        Trace("[GetTaskInfo] Failed to get process information for pid: %d", pid);
+        return false;
+    } 
+
+    return true;
+}
+#endif
+
+//--------------------------------------------------------------------
+//
+// GetProcessStat - Gets the process stats for the given pid
+//
+//--------------------------------------------------------------------
+bool GetProcessStat(pid_t pid, struct ProcessStat *proc) {
+#ifdef __linux__
+    char procFilePath[32];
+    char fileBuffer[1024];
+    char *token;
+    char *savePtr = NULL;
+
+    auto_free_file FILE *procFile = NULL;
+
+    // Get UID's in /proc/%d/status
+    if(GetUids(pid, proc) == false)
+    {
+        Log(error, "Failed to get UID's");
+        return false;
+    }
+#endif
+
+#ifdef __APPLE__
+    struct proc_taskallinfo taskInfo;
+    if(GetTaskInfo(&taskInfo, pid) == false)
+    {
+        return false;
+    }
+#endif
+
+    // Get number of file descriptors in /proc/%d/fdinfo. This directory only contains sub directories for each file descriptor.
+    if(GetNumFileDescriptors(pid, proc) == false)
+    {
+        Log(error, "Failed to get number of file descriptors");
+        return false;
+    }
+
+#ifdef __linux__
     // Read /proc/[pid]/stat
     if(sprintf(procFilePath, "/proc/%d/stat", pid) < 0){
         return false;
@@ -225,7 +351,13 @@ bool GetProcessStat(pid_t pid, struct ProcessStat *proc) {
     }
 
     proc->num_threads = strtol(token, NULL, 10);
+#endif    
 
+#ifdef __APPLE__
+    proc->num_threads = taskInfo.ptinfo.pti_threadnum;
+#endif
+
+#ifdef __linux__
     // (21) itrealvalue
     token = strtok_r(NULL, " ", &savePtr);
     if(token == NULL){
@@ -241,9 +373,12 @@ bool GetProcessStat(pid_t pid, struct ProcessStat *proc) {
         Trace("GetProcessStat: failed to get token from proc/[pid]/stat - starttime.");
         return false;
     }
-
     proc->starttime = strtoull(token, NULL, 10);
+#else
+    proc->starttime = taskInfo.pbsd.pbi_start_tvsec;
+#endif
 
+#ifdef __linux__
     // (23) vsize
     token = strtok_r(NULL, " ", &savePtr);
     if(token == NULL){
@@ -260,8 +395,13 @@ bool GetProcessStat(pid_t pid, struct ProcessStat *proc) {
         return false;
     }
 
-    proc->rss = strtol(token, NULL, 10);
+    proc->rss = strtol(token, NULL, 10);    
+#endif
+#ifdef __APPLE__
+    proc->rss = taskInfo.ptinfo.pti_resident_size; 
+#endif
 
+#ifdef __linux__
     // (25) rsslim
     token = strtok_r(NULL, " ", &savePtr);
     if(token == NULL){
@@ -513,10 +653,31 @@ bool GetProcessStat(pid_t pid, struct ProcessStat *proc) {
     }
 
     proc->exit_code = (int)strtol(token, NULL, 10);
-
+#endif    
     return true;
 }
 
+//--------------------------------------------------------------------
+//
+// GetProcessName - Extracts the process name from the specified
+//                  commandline.
+//
+//--------------------------------------------------------------------
+char * GetProcessNameFromCmdLine(char* cmdLine)
+{
+    char* retString = cmdLine;
+
+    std::string procName = "";
+    std::string inputString = cmdLine;
+    size_t firstSpacePos = inputString.find(' ');
+    if (firstSpacePos != std::string::npos)
+    {
+        procName = inputString.substr(0, firstSpacePos);
+        retString = const_cast<char*>(procName.c_str());
+    }
+
+    return strdup(retString);
+}
 
 //--------------------------------------------------------------------
 //
@@ -524,7 +685,9 @@ bool GetProcessStat(pid_t pid, struct ProcessStat *proc) {
 //                  Returns EMPTY_PROC_NAME for null process name.
 //
 //--------------------------------------------------------------------
-char * GetProcessName(pid_t pid){
+char * GetProcessName(pid_t pid)
+{
+#ifdef __linux__    
     char procFilePath[32];
     char fileBuffer[MAX_CMDLINE_LEN];
     int charactersRead = 0;
@@ -533,24 +696,27 @@ char * GetProcessName(pid_t pid){
     char * processName;
     auto_free_file FILE * procFile = NULL;
 
-    if(sprintf(procFilePath, "/proc/%d/cmdline", pid) < 0) {
+    if(sprintf(procFilePath, "/proc/%d/cmdline", pid) < 0)
+    {
         return NULL;
     }
 
     procFile = fopen(procFilePath, "r");
 
-    if(procFile != NULL) {
-        if(fgets(fileBuffer, MAX_CMDLINE_LEN, procFile) == NULL) {
-
-            if(strlen(fileBuffer) == 0) {
+    if(procFile != NULL)
+    {
+        if(fgets(fileBuffer, MAX_CMDLINE_LEN, procFile) == NULL)
+        {
+            if(strlen(fileBuffer) == 0)
+            {
                 Log(debug, "Empty cmdline.\n");
             }
-            else{
-            }
+
             return NULL;
         }
     }
-    else {
+    else
+    {
         Log(debug, "Failed to open %s.\n", procFilePath);
         return NULL;
     }
@@ -559,25 +725,53 @@ char * GetProcessName(pid_t pid){
     // Extract process name
     stringItr = fileBuffer;
     charactersRead  = strlen(fileBuffer);
-    for(int i = 0; i <= charactersRead; i++){
-        if(fileBuffer[i] == '\0'){
+    for(int i = 0; i <= charactersRead; i++)
+    {
+        if(fileBuffer[i] == '\0')
+        {
             itr = i - itr;
 
-            if(strcmp(stringItr, "sudo") != 0){		// do we have the process name including filepath?
+            // do we have the process name including filepath?
+            if(strcmp(stringItr, "sudo") != 0)
+            {
                 processName = strrchr(stringItr, '/');	// does this process include a filepath?
 
-                if(processName != NULL){
-                    return strdup(processName + 1);	// +1 to not include '/' character
+                if(processName != NULL)
+                {
+                    return GetProcessNameFromCmdLine(processName + 1);	// +1 to not include '/' character
                 }
-                else{
-                    return strdup(stringItr);
+                else
+                {
+                    return GetProcessNameFromCmdLine(stringItr);
                 }
             }
-            else{
+            else
+            {
                 stringItr += (itr+1); 	// +1 to move past '\0'
             }
         }
     }
+#elif __APPLE__
+    char* pathbuf = (char*) malloc(PROC_PIDPATHINFO_MAXSIZE);
+    if(pathbuf == NULL)
+    {
+        return NULL;
+    }
+
+    if (proc_pidpath(pid, pathbuf, PROC_PIDPATHINFO_MAXSIZE) > 0) 
+    {
+        // Extract the process name from the full path
+        char* process_name = strrchr(pathbuf, '/');
+        if (process_name) 
+        {
+            process_name++; 
+            char* proc_copy = strdup(process_name);
+            free(pathbuf);
+            return proc_copy;
+        }
+    }
+
+#endif
 
     return NULL;
 }
@@ -588,9 +782,10 @@ char * GetProcessName(pid_t pid){
 //                  Returns NO_PID on error
 //
 //--------------------------------------------------------------------
-pid_t GetProcessPgid(pid_t pid){
+pid_t GetProcessPgid(pid_t pid)
+{
     pid_t pgid = NO_PID;
-
+#ifdef __linux__
     char procFilePath[32];
     char fileBuffer[1024];
     char *token;
@@ -632,7 +827,7 @@ pid_t GetProcessPgid(pid_t pid){
     }
 
     pgid = (pid_t)strtol(token, NULL, 10);
-
+#endif
     return pgid;
 }
 
@@ -643,6 +838,7 @@ pid_t GetProcessPgid(pid_t pid){
 //--------------------------------------------------------------------
 bool LookupProcessByPid(pid_t pid)
 {
+#ifdef __linux__
     char statFilePath[32];
     auto_free_file FILE *fd = NULL;
 
@@ -660,7 +856,18 @@ bool LookupProcessByPid(pid_t pid)
     if (fd == NULL) {
         return false;
     }
-
+#elif __APPLE__
+    // On MacOS, we can't check if a process is running by looking at /proc
+    // Instead, we can use kill(pid, 0) to check if the process is running
+    if (kill(pid, 0) == 0)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+#endif
     return true;
 }
 
@@ -798,10 +1005,14 @@ pid_t LookupProcessPidByName(const char* name)
 
     for (int i = 0; i < numEntries; i++)
     {
+#ifndef __clang__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-double-free"
         free(nameList[i]);          // Note: Analyzer incorrectly states that there is a double-free here which is incorrect and can be ignored.
 #pragma GCC diagnostic pop
+#else
+        free(nameList[i]);
+#endif
     }
     if(numEntries!=-1)
     {
@@ -820,8 +1031,9 @@ pid_t LookupProcessPidByName(const char* name)
 //--------------------------------------------------------------------
 int GetMaximumPID()
 {
-    auto_free_file FILE * pidMaxFile = NULL;
     int maxPIDs = -1;
+#ifdef __linux__
+    auto_free_file FILE * pidMaxFile = NULL;
 
     pidMaxFile = fopen(PID_MAX_KERNEL_CONFIG, "r");
     if(pidMaxFile != NULL)
@@ -831,6 +1043,9 @@ int GetMaximumPID()
             maxPIDs = -1;
         }
     }
+#elif __APPLE__
+    maxPIDs = INT_MAX;
+#endif
 
     return maxPIDs;
 }
@@ -845,3 +1060,96 @@ int FilterForPid(const struct dirent *entry)
     return IsValidNumberArg(entry->d_name);
 }
 
+
+//--------------------------------------------------------------------
+//
+// GetCpuUsage - Gets the CPU usage of a process.
+//
+//--------------------------------------------------------------------
+#ifdef __linux__
+int GetCpuUsage(pid_t pid)
+{
+    int cpuUsage = 0;
+    struct sysinfo sysInfo;
+    unsigned long totalTime;
+    unsigned long elapsedTime;
+    struct ProcessStat procStat = {0};    
+
+    sysinfo(&sysInfo);
+    GetProcessStat(pid, &procStat);    
+
+    // Calc CPU
+    totalTime = (unsigned long)((procStat.utime + procStat.stime) / HZ);   
+    elapsedTime = (unsigned long)(sysInfo.uptime - (long)(procStat.starttime / HZ)); 
+    cpuUsage = (int)(100 * ((double)totalTime / elapsedTime));
+
+    return cpuUsage;
+}
+#elif __APPLE__
+int GetCpuUsage(pid_t pid)
+{
+    int cpuUsage = 0;
+    pid_t* pids = NULL;
+    int ret = 0;
+    struct timeval boottime;
+    size_t size = sizeof(boottime);
+    int mib[2] = {CTL_KERN, KERN_BOOTTIME};    
+
+    if (sysctl(mib, 2, &boottime, &size, NULL, 0) != 0) 
+    {
+        return -1;
+    }    
+
+    mach_timebase_info_data_t timebaseInfo;
+    kern_return_t kr = mach_timebase_info(&timebaseInfo);
+
+    struct proc_taskallinfo taskInfo;
+    ret = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &taskInfo, sizeof(taskInfo));
+    if (ret <= 0) 
+    {
+        Trace("[GetCpuUsage] Failed to get process information for pid: %d", pid);
+        free(pids);
+        return -1;
+    } 
+    else
+    {
+        unsigned long totalTime = ((taskInfo.ptinfo.pti_total_user * timebaseInfo.numer / timebaseInfo.denom)  + (taskInfo.ptinfo.pti_total_system * timebaseInfo.numer / timebaseInfo.denom)) / 1000000000;
+        unsigned long elapsedTime = ((time(NULL) - boottime.tv_sec)) - (taskInfo.pbsd.pbi_start_tvsec - boottime.tv_sec);
+        cpuUsage = (int)(100 * ((double)totalTime / elapsedTime));
+    }           
+
+    return cpuUsage;
+}
+
+//--------------------------------------------------------------------
+//
+// GetRunningPids - Returns the running PIDS on the system.
+//
+//--------------------------------------------------------------------
+int GetRunningPids(pid_t** pids)
+{
+    int num_pids = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
+    *pids = (pid_t*) malloc(num_pids*sizeof(pid_t));
+    num_pids = proc_listpids(PROC_ALL_PIDS, 0, *pids, num_pids*sizeof(pid_t));
+
+    return num_pids;
+}
+
+
+//--------------------------------------------------------------------
+//
+// GetProcessStartTime - Returns the process start time.
+//
+//--------------------------------------------------------------------
+uint64_t GetProcessStartTime(pid_t pid)
+{
+    struct proc_taskallinfo taskInfo;
+    if(GetTaskInfo(&taskInfo, pid) == false)
+    {
+        return 0;
+    }
+
+    return taskInfo.pbsd.pbi_start_tvsec;
+}
+
+#endif

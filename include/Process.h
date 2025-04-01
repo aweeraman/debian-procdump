@@ -10,7 +10,10 @@
 #ifndef PROCFSLIB_PROCESS_H
 #define PROCFSLIB_PROCESS_H
 
+#ifdef __linux__
 #include <linux/version.h>
+#endif
+
 #include <unistd.h>
 #include <string.h>
 #include <stdbool.h>
@@ -201,6 +204,12 @@ struct ProcessStat {
 
     // NOTE: This does not come from /proc/[pid]/stat rather is populated by enumerating the /proc/<pid>>/fdinfo
     int num_filedescriptors;
+
+    // NOTE: Populated by enumerating the /proc/<pid>>/status
+    uid_t real_uid;
+    uid_t effective_uid;
+    uid_t saved_uid;
+    uid_t fs_uid;
 };
 
 //
@@ -272,11 +281,12 @@ struct ProcessStatus {
 };
 
 // -----------------------------------------------------------
-// a series of functions for collecting infromation from /procfs
+// a series of functions for collecting information from /procfs
 // -----------------------------------------------------------
 
 bool GetProcessStat(pid_t pid, struct ProcessStat *proc);
-char * GetProcessName(pid_t pid);
+char* GetProcessName(pid_t pid);
+char* GetProcessNameFromCmdLine(char* cmdLine);
 pid_t GetProcessPgid(pid_t pid);
 bool LookupProcessByPid(pid_t pid);
 bool LookupProcessByPgid(pid_t pid);
@@ -284,5 +294,7 @@ bool LookupProcessByName(const char* procName);
 pid_t LookupProcessPidByName(const char* name);
 int GetMaximumPID();
 int FilterForPid(const struct dirent *entry);
+int GetCpuUsage(pid_t pid);
+int GetRunningPids(pid_t** pids);
 
 #endif // PROCFSLIB_PROCESS_H

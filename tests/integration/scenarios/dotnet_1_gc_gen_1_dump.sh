@@ -1,6 +1,6 @@
 #!/bin/bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )";
-PROCDUMPPATH=$(readlink -m "$DIR/../../../bin/procdump");
+PROCDUMPPATH=$(readlink -m "$DIR/$1");
 TESTWEBAPIPATH=$(readlink -m "$DIR/../TestWebApi");
 HELPERS=$(readlink -m "$DIR/../helpers.sh");
 
@@ -20,7 +20,7 @@ if [ $? -eq -1 ]; then
 fi
 
 # Wait for 2 dumps (gc start and finish) for generation 1
-sudo $PROCDUMPPATH -log -gcgen 1 -w TestWebApi&
+sudo $PROCDUMPPATH -log stdout -gcgen 1 -w TestWebApi&
 
 # waiting for procdump child process
 PROCDUMPCHILDPID=-1

@@ -1,14 +1,17 @@
 parameters:
-- name: ccopts
+- name: srcPath
   type: string
-  default: ''
-- name: extra
+  default: '.'
+- name: runStaticAnalysis
+  type: boolean
+  default: False
+- name: builddir
   type: string
-  default: ''
+  default: 'procdump_build'    
 
 steps:
 - script: |
-    ${{ parameters.extra }}
-    export OPT_CCFLAGS=${{ parameters.ccopts }}
+    mkdir -p ${{ parameters.srcPath }}/${{ parameters.builddir }} && cd ${{ parameters.srcPath }}/${{ parameters.builddir }}
+    cmake ..
     make
   displayName: "Build ProcDump binaries"

@@ -12,7 +12,7 @@ static const char *LogLevelStrings[] = { "DEBUG", "INFO", "WARN", "CRITICAL", "E
 extern struct ProcDumpConfiguration g_config;
 pthread_mutex_t LoggerLock;
 
-void LogFormatter(enum LogLevel logLevel, const char *message, va_list args)
+void LogFormatter(enum LogLevel logLevel, enum DiagnosticsLogTarget target, const char *message, va_list args)
 {
     char timeBuff[64];
     time_t rawTime;
@@ -30,15 +30,15 @@ void LogFormatter(enum LogLevel logLevel, const char *message, va_list args)
 
     int traceLen = snprintf(NULL, 0, "[%s - %s]: ", timeBuff, LogLevelStrings[logLevel]);
     int argsLen = vsnprintf(NULL, 0, message, copy);
-    if(!(trace = malloc(traceLen+argsLen+1)))
+    if(!(trace = (char*) malloc(traceLen+argsLen+1)))
     {
         pthread_mutex_unlock(&LoggerLock);
         va_end(copy);
         return;
     }
 
-    sprintf(trace, "[%s - %s]: ", timeBuff, LogLevelStrings[logLevel]);
-    vsprintf(trace+traceLen, message, args);
+    snprintf(trace, traceLen+argsLen, "[%s - %s]: ", timeBuff, LogLevelStrings[logLevel]);
+    vsnprintf(trace+traceLen, traceLen+argsLen, message, args);
 
     // If a log entry is not 'debug' it simply goes to stdout.
     // If you want an entry to only go to the syslog, use 'debug'
@@ -46,9 +46,17 @@ void LogFormatter(enum LogLevel logLevel, const char *message, va_list args)
     {
         puts(trace);
     }
-
-    // All log entries also go to the syslog
-    syslog(LOG_DEBUG, "%s", trace);
+    else
+    {
+        if(target == diag_syslog)
+        {
+            syslog(LOG_DEBUG, "%s", trace);
+        }
+        else if(target == diag_stdout)
+        {
+            puts(trace);
+        }
+    }
 
     va_end(copy);
     free(trace);
@@ -59,7 +67,7 @@ void Log(enum LogLevel logLevel, const char *message, ...)
 {
     va_list args;
     va_start(args, message);
-    LogFormatter(logLevel, message, args);
+    LogFormatter(logLevel, diag_stdout, message, args);
     va_end(args);
 }
 
@@ -68,6 +76,11 @@ void DiagTrace(const char *message, ...)
 {
     va_list args;
     va_start(args, message);
-    if(g_config.DiagnosticsLoggingEnabled) LogFormatter(debug, message, args);
+
+    if(g_config.DiagnosticsLoggingEnabled != none)
+    {
+        LogFormatter(debug, g_config.DiagnosticsLoggingEnabled, message, args);
+    }
+
     va_end(args);
 }
