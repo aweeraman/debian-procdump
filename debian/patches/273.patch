@@ -1,0 +1,82 @@
+From 9a335e1d316572aeff4632047dce1600825cbfba Mon Sep 17 00:00:00 2001
+From: Benjamin Drung <benjamin.drung@canonical.com>
+Date: Fri, 31 May 2024 13:00:27 +0200
+Subject: [PATCH 1/3] cmake: Detect armv7l as ARM architecture
+
+On Ubuntu armhf:
+
+```
+$ uname -p
+armv7l
+```
+
+So detect `armv7l` as ARM architecture as well.
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8744912..ee9d6a3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -113,7 +113,7 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+     set(CLRHOSTDEF -DHOST_X86)
+   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL armv6 OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv6l)
+     set(CLRHOSTDEF -DHOST_ARM -DHOST_ARMV6)
+-  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL arm OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv7-a)
++  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL arm OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv7-a OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv7l)
+     set(CLRHOSTDEF -DHOST_ARM)
+   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64 OR CMAKE_SYSTEM_PROCESSOR STREQUAL arm64)
+     set(CLRHOSTDEF -DHOST_ARM64 -DHOST_64BIT)
+
+From f0c169e65bad0697c9510ebd5dca1e06c7d82011 Mon Sep 17 00:00:00 2001
+From: Gianfranco Costamagna <locutusofborg@debian.org>
+Date: Mon, 31 Mar 2025 08:20:21 +0200
+Subject: [PATCH 2/3] cmake: detect armv8l as ARM architecture
+
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ee9d6a3..437f070 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -113,7 +113,7 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+     set(CLRHOSTDEF -DHOST_X86)
+   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL armv6 OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv6l)
+     set(CLRHOSTDEF -DHOST_ARM -DHOST_ARMV6)
+-  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL arm OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv7-a OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv7l)
++  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL arm OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv7-a OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv7l OR CMAKE_SYSTEM_PROCESSOR STREQUAL armv8l)
+     set(CLRHOSTDEF -DHOST_ARM)
+   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64 OR CMAKE_SYSTEM_PROCESSOR STREQUAL arm64)
+     set(CLRHOSTDEF -DHOST_ARM64 -DHOST_64BIT)
+
+From 734bbe18a4e18330c6a525bd79f29d78d62fd116 Mon Sep 17 00:00:00 2001
+From: Gianfranco Costamagna <locutusofborg@debian.org>
+Date: Mon, 31 Mar 2025 08:20:40 +0200
+Subject: [PATCH 3/3] 32bit: Add missing declaration of *PLONG_PTR fixing a
+ FTBFS such as:
+
+profiler/src/ProcDumpProfiler.cpp:1255:30: error: use of undeclared identifier 'PLONG_PTR'
+ 1255 | msgField = *(PLONG_PTR)(((BYTE *)objectId) + pFieldOffsets[fieldIndex].ulOffset);
+      | ^
+profiler/src/ProcDumpProfiler.cpp:1256:29: warning: comparison between NULL and non-pointer ('LONG_PTR' (aka 'int') and NULL) [-Wnull-arithmetic]
+---
+ profiler/inc/pal_mstypes.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/profiler/inc/pal_mstypes.h b/profiler/inc/pal_mstypes.h
+index 1eee6b2..8110f5e 100644
+--- a/profiler/inc/pal_mstypes.h
++++ b/profiler/inc/pal_mstypes.h
+@@ -503,7 +503,8 @@ UShortToPtr(
+ typedef _W64 __int32 INT_PTR;
+ typedef _W64 unsigned __int32 UINT_PTR;
+ 
+-typedef _W64 __int32 LONG_PTR;
++typedef _W64 __int32 LONG_PTR, *PLONG_PTR;
++
+ typedef _W64 unsigned __int32 ULONG_PTR, *PULONG_PTR;
+ typedef _W64 unsigned __int32 DWORD_PTR, *PDWORD_PTR;
+ 
