@@ -1,3 +1,10 @@
+procdump (3.4.1-1~exp3) experimental; urgency=medium
+
+  * Team upload (salsa.d.o/debian namespace).
+  * Add support for system libbpf from github proposed PR #266
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Tue, 01 Apr 2025 11:37:53 +0200
+
 procdump (3.4.1-1~exp2) experimental; urgency=medium
 
   * Team upload (salsa.d.o/debian namespace).
