@@ -10,59 +10,109 @@ trigger:
 pr:
   - master
 
-stages:
- - stage: "Build"
-   jobs:
-    - job: "ProcDump_Run_Unit_Tests"
-      pool:
-       vmImage: 'ubuntu-latest'
-      variables:
-       CC: gcc-10
-      steps:
-      - script: |
-          sudo apt update
-          sudo apt install -y gdb stress-ng zlib1g-dev
-        displayName: 'Setup build environment'
+resources:
+  repositories:
+    - repository: ProcDump
+      type: github
+      endpoint: sysinternals
+      name: Microsoft/ProcDump-for-Linux
+    - repository: obtemplates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@obtemplates
+  parameters:
+    globalSdl:
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+    stages:
+      - stage: "Build_Run_Tests"
+        jobs:
+        - job: "ProcDump_Build_ARM64_Run_Tests"
+          pool:
+            type: linux
+            hostArchitecture: arm64
+          variables:
+            LinuxContainerImage: 'mcr.microsoft.com/mirror/docker/library/ubuntu:20.04'
+            ob_outputDirectory: '$(Build.SourcesDirectory)\out'
+          steps:
+          - script: |
+              DEBIAN_FRONTEND=noninteractive apt -y update && apt install rsyslog -y
+              rm -f /run/rsyslogd.pid
+              service rsyslog start || true
+            displayName: 'Enable syslog'
 
-      - script: |
-          gcc --version
-          dpkg --list | grep compiler
-        displayName: 'List compiler versions'
+          - script: |
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" sudo
+              chmod +x .devcontainer/install-ubuntu-dependencies.sh
+              .devcontainer/install-ubuntu-dependencies.sh
+            displayName: "Install pre-reqs for Ubuntu"
 
-      - template: templates/build.yaml
-        parameters:
-          ccopts: '-fsanitize=address'
+          - script: |
+              clang --version
+              clang++ --version
+              gcc --version
+            displayName: 'List compiler versions'
 
-      - script: |
-          sudo ./tests/integration/run.sh
-        displayName: 'Run unit tests'
+          - template: templates/build.yaml@ProcDump
 
-      - script: |
-          mkdir $(Build.ArtifactStagingDirectory)/logs
-          cp /var/log/syslog $(Build.ArtifactStagingDirectory)/logs
-          cp /var/tmp/procdumpprofiler.log $(Build.ArtifactStagingDirectory)/logs
-        displayName: 'Copy log artifacts to staging'
-        condition: always()
+          - script: |
+              cd procdump_build/tests/integration
+              ./run.sh
+            displayName: 'Run unit tests'
 
-      - task: PublishBuildArtifacts@1
-        condition: always()
-        inputs:
-          PathtoPublish: '$(Build.ArtifactStagingDirectory)/logs/syslog'
-          ArtifactName: 'syslog'
-          publishLocation: 'Container'
+        - job: "ProcDump_Build_AMD64_Run_Tests"
+          pool:
+            type: linux
+          variables:
+            LinuxContainerImage: 'mcr.microsoft.com/mirror/docker/library/ubuntu:20.04'
+            ob_outputDirectory: '$(Build.SourcesDirectory)\out'
+          steps:
+          - script: |
+              DEBIAN_FRONTEND=noninteractive apt -y update && apt install rsyslog -y
+              rm -f /run/rsyslogd.pid
+              service rsyslog start || true
+            displayName: 'Enable syslog'
 
-      - task: PublishBuildArtifacts@1
-        condition: always()
-        inputs:
-          PathtoPublish: '$(Build.ArtifactStagingDirectory)/logs/procdumpprofiler.log'
-          ArtifactName: 'procdumpprofiler.log'
-          publishLocation: 'Container'
+          - script: |
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" sudo
+              chmod +x .devcontainer/install-ubuntu-dependencies.sh
+              .devcontainer/install-ubuntu-dependencies.sh
+            displayName: "Install pre-reqs for Ubuntu"
 
-    - job: "Build_ProcDump"
-      pool:
-       vmImage: 'ubuntu-latest'
-      variables:
-       CC: gcc-10
-      steps:
-      - template: templates/build.yaml
-      displayName: 'Build ProcDump'
+          - script: |
+              clang --version
+              clang++ --version
+              gcc --version
+            displayName: 'List compiler versions'
+
+          - template: templates/build.yaml@ProcDump
+
+          - script: |
+              cd procdump_build/tests/integration
+              ./run.sh
+            displayName: 'Run unit tests'
+
+        - job: "ProcDump_Build_MACOS_Run_Tests"
+          pool:
+            type: linux
+            isCustom: true
+            name: Azure Pipelines
+            vmImage: 'macOS-latest'
+          variables:
+            ob_outputDirectory: '$(Build.SourcesDirectory)/out'
+          steps:
+
+          - script: |
+              sw_vers
+            displayName: 'Diagnostics'
+
+          - template: templates/build.yaml@ProcDump
+
+          - script: |
+              cd procdump_build/tests/integration
+              sudo ./run.sh
+            displayName: 'Run unit tests'

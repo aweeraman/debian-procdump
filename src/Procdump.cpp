@@ -33,28 +33,19 @@ void OnExit()
 //--------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-    // print banner and begin intialization
+    // print banner and begin initialization
     PrintBanner();
     InitProcDump();
 
-    // print privelege warning
-    if(geteuid() != 0)
+    // Parse command line arguments
+    if (GetOptions(&g_config, argc, argv) != 0)
     {
-        Log(warn, "Procdump not running with elevated credentials. If your uid does not match the uid of the target process procdump will not be able to capture memory dumps");
-        PrintUsage();
+        exit(-1);
     }
-    else
-    {
-        if (GetOptions(&g_config, argc, argv) != 0)
-        {
-            Trace("main: failed to parse command line arguments");
-            exit(-1);
-        }
 
-        // Register exit handler
-        atexit(OnExit);
+    // Register exit handler
+    atexit(OnExit);
 
-        // monitor for all specified processes
-        MonitorProcesses(&g_config);
-    }
+    // monitor for all specified processes
+    MonitorProcesses(&g_config);
 }

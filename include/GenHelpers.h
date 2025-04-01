@@ -10,7 +10,12 @@
 #ifndef GENHELPERS_H
 #define GENHELPERS_H
 
+#ifdef __linux__
 #include <linux/version.h>
+#elif __APPLE_
+#endif
+
+#include <pthread.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdbool.h>
@@ -23,8 +28,18 @@
 #include <sys/types.h>
 #include <dirent.h>
 
+//
+// Minimum kernel version for ProcDump to run
+//
 #define MIN_KERNEL_VERSION 3
 #define MIN_KERNEL_PATCH 5
+
+//
+// Minimum kernel version for ProcDump restrack to run
+//
+#define MIN_RESTRACK_KERNEL_VERSION 4
+#define MIN_RESTRACK_KERNEL_PATCH 18
+
 
 //-------------------------------------------------------------------------------------
 // Auto clean up of memory using free (void)
@@ -86,7 +101,9 @@ static inline void cancel_pthread(unsigned long* val)
 {
     if(*val!=-1)
     {
+        #ifdef __linux__
         pthread_cancel(*val);
+        #endif
     }
 }
 
@@ -98,8 +115,9 @@ static inline void cancel_pthread(unsigned long* val)
 
 int* GetSeparatedValues(char* src, char* separator, int* numValues);
 bool ConvertToInt(const char* src, int* conv);
+bool ConvertToIntHex(const char* src, int* conv);
 bool IsValidNumberArg(const char *arg);
-bool CheckKernelVersion();
+bool CheckKernelVersion(int major, int minor);
 uint16_t* GetUint16(char* buffer);
 char* GetPath(char* lineBuf);
 FILE *popen2(const char *command, const char *type, pid_t *pid);
@@ -110,7 +128,9 @@ bool createDir(const char *dir, mode_t perms);
 char* GetSocketPath(char* prefix, pid_t pid, pid_t targetPid);
 int send_all(int socket, void *buffer, size_t length);
 int recv_all(int socket, void* buffer, size_t length);
-pid_t gettid();
+pid_t gettid() noexcept;
+unsigned long GetCoreDumpFilter(int pid);
+bool SetCoreDumpFilter(int pid, unsigned long filter);
 
 #endif // GENHELPERS_H
 

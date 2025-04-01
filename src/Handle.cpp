@@ -63,9 +63,40 @@ int WaitForSingleObject(struct Handle *Handle, int Milliseconds)
         break;
 
     case SEMAPHORE:
-        rc = (Milliseconds == INFINITE_WAIT) ?
-            sem_wait(&(Handle->semaphore)) :
-            sem_timedwait(&(Handle->semaphore), &ts);
+        if(Milliseconds == INFINITE_WAIT)
+        {
+            sem_wait(Handle->semaphore);
+        }
+        else
+        {
+#ifdef __linux__            
+            sem_timedwait(Handle->semaphore, &ts);
+#elif __APPLE__
+            struct timespec now, sleep_time;    
+            while(1)
+            {
+                if (sem_trywait(Handle->semaphore) == 0) 
+                {
+                    return 0; // Successfully acquired the semaphore
+                }                
+
+                clock_gettime(CLOCK_REALTIME, &now);
+
+                // Check if the timeout has expired
+                if ((now.tv_sec > ts.tv_sec) ||
+                    (now.tv_sec == ts.tv_sec && now.tv_nsec >= ts.tv_nsec)) 
+                {
+                    break;
+                }
+
+                // Calculate the time to sleep
+                sleep_time.tv_sec = 0;
+                sleep_time.tv_nsec = 1000000; // 1 millisecond
+                nanosleep(&sleep_time, NULL);
+            }
+#endif
+        }
+
         break;
 
     default:
@@ -211,8 +242,8 @@ int WaitForMultipleObjects(int Count, struct Handle **Handles, bool WaitAll, int
 
     coordinator->evtCanCleanUp.type = EVENT;
     coordinator->evtStartWaiting.type = EVENT;
-    InitNamedEvent(&(coordinator->evtCanCleanUp.event), true, false, "CanCleanUp");
-    InitNamedEvent(&(coordinator->evtStartWaiting.event), true, false, "StartWaiting");
+    InitNamedEvent(&(coordinator->evtCanCleanUp.event), true, false, const_cast<char*> ("CanCleanUp"));
+    InitNamedEvent(&(coordinator->evtStartWaiting.event), true, false, const_cast<char*> ("StartWaiting"));
     pthread_cond_init(&coordinator->condEventTriggered, NULL);
     pthread_mutex_init(&coordinator->mutexEventTriggered, NULL);
 
@@ -287,9 +318,13 @@ int WaitForMultipleObjects(int Count, struct Handle **Handles, bool WaitAll, int
         retVal = (WaitAll) ? rc : results[0].retVal + results[0].threadIndex;
     }
 
+#ifndef __clang__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
     // Analyzer false positive: 'coordinator' is freed on a different thread.
     return retVal;
 #pragma GCC diagnostic pop
+#else
+    return retVal;
+#endif
 }

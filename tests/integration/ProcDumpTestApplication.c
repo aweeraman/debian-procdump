@@ -1,12 +1,74 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <signal.h>
 #include <limits.h>
+#include <sys/mman.h>
 
 #define FILE_DESC_COUNT	500
 #define THREAD_COUNT	100
+
+
+void* dFunc(int type)
+{
+        if(type == 0)
+        {
+                char* alloc = malloc(10000);
+                for(int i=0; i<10000; i++)
+                {
+                        alloc[i] = 'a';
+                }
+                mlock(alloc, 10000);
+                return alloc;
+        }
+        else if (type == 1)
+        {
+                char* callocAlloc = calloc(1, 10000);
+                mlock(callocAlloc, 10000);
+                return callocAlloc;
+        }
+        else if (type == 2)
+        {
+                void* lastAlloc = malloc(10000);
+                void* newAlloc = realloc(lastAlloc, 20000);
+                for(int i=0; i<20000; i++)
+                {
+                        ((char*)newAlloc)[i] = 'a';
+                }                
+                mlock(newAlloc, 20000);
+                return newAlloc;
+        }
+        else if (type == 3)
+        {
+#ifdef __linux__                
+                void* lastAlloc = malloc(10000);
+                void* newAlloc = reallocarray(lastAlloc, 10, 20000);
+                return newAlloc;
+#endif                
+                return NULL;
+        }
+        else
+        {
+                return NULL;
+        }
+}
+
+void* c(int type)
+{
+        return dFunc(type);
+}
+
+void* b(int type)
+{
+        return c(type);
+}
+
+void* a(int type)
+{
+        return b(type);
+}
 
 void* ThreadProc(void *input)
 {
@@ -47,6 +109,19 @@ int main(int argc, char *argv[])
           {
               pthread_create(&threads[i], NULL, ThreadProc, NULL);
           }
+          sleep(UINT_MAX);
+        }
+        else if (strcmp("mem", argv[1]) == 0)
+        {
+          sleep(10);
+          for(int i=0; i<1000; i++)
+          {
+            a(0);
+            a(1);
+            a(2);
+            a(3);
+          }
+
           sleep(UINT_MAX);
         }
     }

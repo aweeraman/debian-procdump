@@ -1,10 +1,12 @@
-# Containerized Builds
+# Linux
+## Containerized Builds
 The Dockerfiles in this repo (located under the `.devcontainer` directory) are the same Dockerfiles that are used on the backend build systems when a PR is built as part of the PR checks. This provides an easy and convenient way to ensure that any changes being made can be built using the same backend infrastructure.
 
-There are two Dockerfiles available:
+There are three Dockerfiles available:
 
 - `Dockerfile_Ubuntu` (default)
 - `Dockerfile_Rocky`
+- `Dockerfile_AzureLinux`
 
 There are two primary ways to build using containers:
 
@@ -16,42 +18,58 @@ For more information about VS Code Dev Containers please see - https://code.visu
 
 To build inside the container:
 ```sh
+mkdir build
+cd build
+cmake ..
 make
-make install
 ```
-# Local Builds
-## Prerequisites
-- clang v10+
-- gcc v10+
-- zlib
-- make
-
-### Ubuntu
+## Local Builds
+### Prerequisites
+#### Ubuntu
 ```
 sudo apt update
-sudo apt -y install gcc make clang gdb zlib1g-dev
+sudo apt -y install gcc cmake make clang clang-12 gdb zlib1g-dev libelf-dev build-essential libbpf-dev linux-tools-common linux-tools-$(uname -r)
 ```
 
-### Rocky Linux
+#### Rocky Linux
 ```
-sudo yum install gcc make clang gdb zlib-devel
+sudo yum install gcc make cmake clang gdb zlib-devel elfutils-libelf-devel libbpf-devel bpftool
 ```
 
-## Build
+### Build
 ```sh
+mkdir build
+cd build
+cmake ..
 make
-make install
 ```
 
-# Building Packages
-The distribution packages for Procdump for Linux are constructed utilizing `debbuild` for Debian targets and `rpmbuild` for Fedora targets.
+## Building Packages
+The distribution packages for Procdump for Linux are constructed utilizing `dpkg-deb` for Debian targets and `rpmbuild` for Fedora targets.
 
-To build a `deb` package of Procdump:
+Create a deb package:
 ```sh
-make && make deb
+make deb
 ```
 
-To build a `rpm` package of Procdump:
+Create an rpm package:
 ```sh
-make && make rpm
+make rpm
+```
+
+# macOS
+### Prerequisites
+Install the clang tool chain. 
+
+### Build
+```sh
+mkdir build
+cd build
+cmake ..
+make
+```
+
+## Building Packages
+```sh
+make brew
 ```

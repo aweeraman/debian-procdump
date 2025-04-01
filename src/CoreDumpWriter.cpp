@@ -8,6 +8,8 @@
 //--------------------------------------------------------------------
 #include "Includes.h"
 
+#include <memory>
+
 static const char *CoreDumpTypeStrings[] = { "commit", "cpu", "thread", "filedesc", "signal", "time", "exception", "manual" };
 
 //--------------------------------------------------------------------
@@ -32,13 +34,47 @@ struct CoreDumpWriter *NewCoreDumpWriter(enum ECoreDumpType type, struct ProcDum
     return writer;
 }
 
-
 //--------------------------------------------------------------------
 //
 // GetCoreDumpName - Gets the core dump name
 //
 //--------------------------------------------------------------------
-char* GetCoreDumpName(pid_t pid, char* procName, char* dumpPath, char* dumpName, enum ECoreDumpType type)
+char* GetCoreDumpName(ProcDumpConfiguration* config, ECoreDumpType type)
+{
+    char* name = sanitize(config->ProcessName);
+    char* gcorePrefixName = GetCoreDumpPrefixName(config->ProcessId, name, config->CoreDumpPath, config->CoreDumpName, type);
+    char* dumpName = (char*) malloc(PATH_MAX+1);
+    if(!dumpName)
+    {
+        Log(error, INTERNAL_ERROR);
+        Trace("GetCoreDumpName: Memory allocation failure");
+        free(name);
+        free(gcorePrefixName);
+        return NULL;
+    }
+
+    if(snprintf(dumpName, PATH_MAX, "%s.%d", gcorePrefixName, config->ProcessId) < 0)
+    {
+        Log(error, INTERNAL_ERROR);
+        Trace("GetCoreDumpName: failed sprintf core file name");
+        free(dumpName);
+        free(name);
+        free(gcorePrefixName);
+        return NULL;
+    }
+
+    free(name);
+    free(gcorePrefixName);
+
+    return dumpName;
+}
+
+//--------------------------------------------------------------------
+//
+// GetCoreDumpPrefixName - Gets the core dump prefix name
+//
+//--------------------------------------------------------------------
+char* GetCoreDumpPrefixName(pid_t pid, char* procName, char* dumpPath, char* dumpName, enum ECoreDumpType type)
 {
     auto_free char *name = sanitize(procName);
     time_t rawTime = {0};
@@ -46,11 +82,11 @@ char* GetCoreDumpName(pid_t pid, char* procName, char* dumpPath, char* dumpName,
     char date[DATE_LENGTH];
     char* gcorePrefixName = NULL;
 
-    gcorePrefixName = malloc(PATH_MAX+1);
+    gcorePrefixName = (char*) malloc(PATH_MAX+1);
     if(!gcorePrefixName)
     {
         Log(error, INTERNAL_ERROR);
-        Trace("GetCoreDumpName: Memory allocation failure");
+        Trace("GetCoreDumpPrefixName: Memory allocation failure");
         exit(-1);
     }
 
@@ -63,7 +99,7 @@ char* GetCoreDumpName(pid_t pid, char* procName, char* dumpPath, char* dumpName,
         Trace("GetCoreDumpName: failed localtime");
         exit(-1);
     }
-    strftime(date, 26, "%Y-%m-%d_%H:%M:%S", timerInfo);
+    strftime(date, 26, "%y%m%d_%H%M%S", timerInfo);
 
     // assemble the full file name (including path) for core dumps
     if(dumpName != NULL)
@@ -99,38 +135,63 @@ char* GetCoreDumpName(pid_t pid, char* procName, char* dumpPath, char* dumpName,
 //          1   - Quit/Limit reached
 //
 //--------------------------------------------------------------------
-int WriteCoreDump(struct CoreDumpWriter *self)
+char* WriteCoreDump(struct CoreDumpWriter *self)
 {
     int rc = 0;
+    char* dumpFileName = NULL;
 
     // Enter critical section (block till we decrement semaphore)
     rc = WaitForQuitOrEvent(self->Config, &self->Config->semAvailableDumpSlots, INFINITE_WAIT);
-    if(rc == 0){
+    if(rc == 0)
+    {
         Log(error, INTERNAL_ERROR);
         Trace("WriteCoreDump: failed WaitForQuitOrEvent.");
         exit(-1);
     }
-    if(pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL) != 0){
+    if(pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL) != 0)
+    {
         Log(error, INTERNAL_ERROR);
         Trace("WriteCoreDump: failed pthread_setcanceltype.");
         exit(-1);
     }
-    switch (rc) {
+    switch (rc)
+    {
         case WAIT_OBJECT_0: // QUIT!  Time for cleanup, no dump
             break;
         case WAIT_OBJECT_0+1: // We got a dump slot!
             {
                 char* socketName = NULL;
+#ifdef __linux__
                 IsCoreClrProcess(self->Config->ProcessId, &socketName);
-                if ((rc = WriteCoreDumpInternal(self, socketName)) == 0) {
+#endif
+                unsigned int currentCoreDumpFilter = -1;
+                if(self->Config->CoreDumpMask != -1)
+                {
+                    currentCoreDumpFilter = GetCoreDumpFilter(self->Config->ProcessId);
+                    SetCoreDumpFilter(self->Config->ProcessId, self->Config->CoreDumpMask);
+                }
+                if ((dumpFileName = WriteCoreDumpInternal(self, socketName)) != NULL)
+                {
                     // We're done here, unlock (increment) the sem
-                    if(sem_post(&self->Config->semAvailableDumpSlots.semaphore) == -1){
+                    if(sem_post(self->Config->semAvailableDumpSlots.semaphore) == -1)
+                    {
                         Log(error, INTERNAL_ERROR);
                         Trace("WriteCoreDump: failed sem_post.");
                         if(socketName) free(socketName);
+                        if(self->Config->CoreDumpMask != -1 && currentCoreDumpFilter != -1)
+                        {
+                            SetCoreDumpFilter(self->Config->ProcessId, currentCoreDumpFilter);
+                        }
+
                         exit(-1);
                     }
                 }
+
+                if(self->Config->CoreDumpMask != -1 && currentCoreDumpFilter != -1)
+                {
+                    SetCoreDumpFilter(self->Config->ProcessId, currentCoreDumpFilter);
+                }
+
                 if(socketName) free(socketName);
             }
             break;
@@ -140,13 +201,15 @@ int WriteCoreDump(struct CoreDumpWriter *self)
             Trace("WriteCoreDump: Error in default case");
             break;
     }
-    if(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL) != 0){
+
+    if(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL) != 0)
+    {
         Log(error, INTERNAL_ERROR);
         Trace("WriteCoreDump: failed pthread_setcanceltype.");
         exit(-1);
     }
 
-    return rc;
+    return dumpFileName;
 }
 
 // --------------------------------------------------------------------------------------
@@ -154,9 +217,9 @@ int WriteCoreDump(struct CoreDumpWriter *self)
 // Should only ever have <max number of dump slots> running concurrently
 // The default value of which is 1 (hard coded) and is set in
 // ProcDumpConfiguration.semAvailableDumpSlots
-// Returns 1 if we trigger quit in the crit section, 0 otherwise
+// Returns NULL if we fail to generate a core dump else returns the name of the core dump
 // --------------------------------------------------------------------------------------
-int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
+char* WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
 {
     char command[BUFFER_LENGTH];
     char ** outputBuffer;
@@ -165,25 +228,21 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
     auto_free char* gcorePrefixName = NULL;
     int  lineLength;
     int  i = 0;
-    int  rc = 0;
     pid_t gcorePid;
     FILE *commandPipe = NULL;
 
     char *name = sanitize(self->Config->ProcessName);
     pid_t pid = self->Config->ProcessId;
 
-    gcorePrefixName = GetCoreDumpName(self->Config->ProcessId, name, self->Config->CoreDumpPath, self->Config->CoreDumpName, self->Type);
-
-    // assemble the command
-    if(snprintf(command, BUFFER_LENGTH, "gcore -o %s %d 2>&1", gcorePrefixName, pid) < 0)
-    {
-        Log(error, INTERNAL_ERROR);
-        Trace("WriteCoreDumpInternal: failed sprintf gcore command");
-        exit(-1);
-    }
+    gcorePrefixName = GetCoreDumpPrefixName(self->Config->ProcessId, name, self->Config->CoreDumpPath, self->Config->CoreDumpName, self->Type);
 
     // assemble filename
-    if(snprintf(coreDumpFileName, PATH_MAX, "%s.%d", gcorePrefixName, pid) < 0)
+    // On Linux, gcore appends .<pid> to the outputfile but on macOS it doesn't
+#ifdef __linux__
+    if(snprintf(coreDumpFileName, PATH_MAX, "%s", gcorePrefixName) < 0)
+#else
+     if(snprintf(coreDumpFileName, PATH_MAX, "%s.%d", gcorePrefixName, pid) < 0)
+#endif
     {
         Log(error, INTERNAL_ERROR);
         Trace("WriteCoreDumpInternal: failed sprintf core file name");
@@ -194,7 +253,15 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
     if(access(coreDumpFileName, F_OK)==0 && !self->Config->bOverwriteExisting)
     {
         Log(info, "Dump file %s already exists and was not overwritten (use -o to overwrite)", coreDumpFileName);
-        return -1;
+        return NULL;
+    }
+
+    // assemble the command
+    if(snprintf(command, BUFFER_LENGTH, "gcore -o %s %d 2>&1", coreDumpFileName, pid) < 0)
+    {
+        Log(error, INTERNAL_ERROR);
+        Trace("WriteCoreDumpInternal: failed sprintf gcore command");
+        exit(-1);
     }
 
     // check if we're allowed to write into the target directory
@@ -208,6 +275,7 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
 
     if(socketName!=NULL)
     {
+#ifdef __linux__
         // If we have a socket name, we're dumping a .NET process....
         if(GenerateCoreClrDump(socketName, coreDumpFileName)==false)
         {
@@ -220,6 +288,7 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
 
             self->Config->NumberOfDumpsCollected++; // safe to increment in crit section
         }
+#endif
     }
     else
     {
@@ -270,12 +339,23 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
 
         // close pipe reading from gcore
         self->Config->gcorePid = NO_PID;                // reset gcore pid so that signal handler knows we aren't dumping
-        int pcloseStatus = pclose(commandPipe);
+        int pcloseStatus = 0;
+#ifdef __linux__
+        pcloseStatus = pclose(commandPipe);
+#endif
 
         bool gcoreFailedMsg = false;    // in case error sneaks through the message output
 
         // check if gcore was able to generate the dump
-        if(gcoreStatus != 0 || pcloseStatus != 0 || (gcoreFailedMsg = (strstr(outputBuffer[i-1], "gcore: failed") != NULL)))
+        if(outputBuffer[i-1] != NULL)
+        {
+            if(strstr(outputBuffer[i-1], "gcore: failed") != NULL)
+            {
+                gcoreFailedMsg = true;
+            }
+        }
+
+        if(gcoreStatus != 0 || pcloseStatus != 0 || (gcoreFailedMsg == true))
         {
             Log(error, "An error occurred while generating the core dump:");
             if (gcoreStatus != 0)
@@ -293,15 +373,16 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
                     Log(error, "GCORE - %s", outputBuffer[j]);
                 }
             }
-
-            rc = gcoreStatus;
         }
         else
         {
             // On WSL2 there is a delay between the core dump being written to disk and able to succesfully access it in the below check
             sleep(1);
-
             // validate that core dump file was generated
+#ifdef __linux__
+            // If we are on Linux we add back the .pid since gcore adds it to the filename
+            snprintf(coreDumpFileName, PATH_MAX, "%s.%d", gcorePrefixName, pid);
+#endif
             if(access(coreDumpFileName, F_OK) != -1)
             {
                 if(self->Config->nQuit)
@@ -323,7 +404,6 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
                     if (self->Config->NumberOfDumpsCollected >= self->Config->NumberOfDumpsToCollect)
                     {
                         SetEvent(&self->Config->evtQuit.event); // shut it down, we're done here
-                        rc = 1;
                     }
                 }
             }
@@ -339,6 +419,6 @@ int WriteCoreDumpInternal(struct CoreDumpWriter *self, char* socketName)
 
     free(name);
 
-    return rc;
+    return strdup(coreDumpFileName);
 }
 

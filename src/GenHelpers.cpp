@@ -6,9 +6,10 @@
 // General purpose helpers
 //
 //--------------------------------------------------------------------
-#define _GNU_SOURCE
 #include "Includes.h"
+#ifdef __linux__
 #include <syscall.h>
+#endif
 
 //--------------------------------------------------------------------
 //
@@ -43,7 +44,7 @@ int* GetSeparatedValues(char* src, char* separator, int* numValues)
 
     if(i > 0)
     {
-        ret = malloc(i*sizeof(int));
+        ret = (int*) malloc(i*sizeof(int));
         if(ret)
         {
             i = 0;
@@ -97,32 +98,70 @@ bool ConvertToInt(const char* src, int* conv)
 
 //--------------------------------------------------------------------
 //
-// CheckKernelVersion - Check to see if current kernel is 3.5+.
+// ConvertToIntHex - Helper to convert from a char* (hex) to int
 //
-// ProcDump won't proceed if current kernel is less than 3.5.
-// Returns true if >= 3.5+, returns false otherwise or error.
 //--------------------------------------------------------------------
-bool CheckKernelVersion()
+bool ConvertToIntHex(const char* src, int* conv)
 {
-    struct utsname kernelInfo;
+    int temp = 0;
+
+    for (size_t i=0; src[i] != '\0'; i++)
+    {
+        if ((src[i] >= '0') && (src[i] <= '9'))
+        {
+            // Shift left by 0x10 (16) and add the digit using an ASCII delta
+            temp *= 0x10;
+            temp += src[i] - '0';
+        }
+        else if ((src[i] >= 'A') && (src[i] <= 'F'))
+        {
+            // Shift left by 0x10 (16) and add the digit using an ASCII delta
+            temp *= 0x10;
+            temp += 10 + (src[i] - 'A');
+        }
+        else if ((src[i] >= 'a') && (src[i] <= 'f'))
+        {
+            // Shift left by 0x10 (16) and add the digit using an ASCII delta
+            temp *= 0x10;
+            temp += 10 + (src[i] - 'a');
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    *conv = temp;
+    return true;
+}
+
+//--------------------------------------------------------------------
+//
+// CheckKernelVersion - Check to see if current kernel is greater than
+// specified.
+//
+//--------------------------------------------------------------------
+bool CheckKernelVersion(int major, int minor)
+{
+    struct utsname kernelInfo = {};
     if(uname(&kernelInfo) == 0)
     {
         int version, patch = 0;
         if(sscanf(kernelInfo.release,"%d.%d",&version,&patch) != 2)
         {
-            Log(error, "Cannot validate kernel version");
-            Trace("%s",strerror(errno));
             return false;
         }
 
-        if(version > MIN_KERNEL_VERSION) return true;
-        if(version == MIN_KERNEL_VERSION && patch >= MIN_KERNEL_PATCH) return true;
+        if(version > major)
+        {
+            return true;
+        }
+        else if(version == major && patch >= minor)
+        {
+            return true;
+        }
+    }
 
-    }
-    else
-    {
-        Log(error, strerror(errno));
-    }
     return false;
 }
 
@@ -155,17 +194,19 @@ bool IsValidNumberArg(const char *arg)
 //--------------------------------------------------------------------
 uint16_t* GetUint16(char* buffer)
 {
+    int len;
     uint16_t* dumpFileNameW = NULL;
 
     if(buffer!=NULL)
     {
-        dumpFileNameW = malloc((strlen(buffer)+1)*sizeof(uint16_t));
+        len = strlen(buffer) + 1;
+        dumpFileNameW = (uint16_t*) malloc((len)*sizeof(uint16_t));
         if(dumpFileNameW==NULL)
         {
             return NULL;
         }
 
-        for(int i=0; i<(strlen(buffer)+1); i++)
+        for(int i=0; i<len; i++)
         {
             dumpFileNameW[i] = (uint16_t) buffer[i];
         }
@@ -186,6 +227,7 @@ uint16_t* GetUint16(char* buffer)
 //--------------------------------------------------------------------
 char* GetPath(char* lineBuf)
 {
+    int i = 7;
     char delim[] = " ";
 
     // example of /proc/net/unix line:
@@ -193,7 +235,7 @@ char* GetPath(char* lineBuf)
     char *ptr = strtok(lineBuf, delim);
 
     // Move to last column which contains the name of the file (/socket)
-    for(int i=0; i<7; i++)
+    while (i--)
     {
         ptr = strtok(NULL, delim);
     }
@@ -453,24 +495,24 @@ char* GetSocketPath(char* prefix, pid_t pid, pid_t targetPid)
         if(targetPid)
         {
             int len = snprintf(NULL, 0, "/tmp/%s%d-%d", prefix, pid, targetPid);
-            t = malloc(len+1);
+            t = (char*) malloc(len+1);
             if(t==NULL)
             {
                 return NULL;
             }
 
-            sprintf(t, "/tmp/%s%d-%d", prefix, pid, targetPid);
+            snprintf(t, len+1, "/tmp/%s%d-%d", prefix, pid, targetPid);
         }
         else
         {
             int len = snprintf(NULL, 0, "/tmp/%s%d", prefix, pid);
-            t = malloc(len+1);
+            t = (char*) malloc(len+1);
             if(t==NULL)
             {
                 return NULL;
             }
 
-            sprintf(t, "/tmp/%s%d", prefix, pid);
+            snprintf(t, len+1, "/tmp/%s%d", prefix, pid);
         }
     }
     else
@@ -478,24 +520,24 @@ char* GetSocketPath(char* prefix, pid_t pid, pid_t targetPid)
         if(targetPid)
         {
             int len = snprintf(NULL, 0, "%s/%s%d-%d", prefixTmpFolder, prefix, pid, targetPid);
-            t = malloc(len+1);
+            t = (char*) malloc(len+1);
             if(t==NULL)
             {
                 return NULL;
             }
 
-            sprintf(t, "%s/%s%d-%d", prefixTmpFolder, prefix, pid, targetPid);
+            snprintf(t, len+1, "%s/%s%d-%d", prefixTmpFolder, prefix, pid, targetPid);
         }
         else
         {
             int len = snprintf(NULL, 0, "%s/%s%d", prefixTmpFolder, prefix, pid);
-            t = malloc(len+1);
+            t = (char*) malloc(len+1);
             if(t==NULL)
             {
                 return NULL;
             }
 
-            sprintf(t, "%s/%s%d", prefixTmpFolder, prefix, pid);
+            snprintf(t, len+1, "%s/%s%d", prefixTmpFolder, prefix, pid);
         }
     }
 
@@ -562,11 +604,63 @@ int recv_all(int socket, void* buffer, size_t length)
 // Note: SYS_gettid is not POSIX compliant.
 //
 //--------------------------------------------------------------------
-pid_t gettid()
+pid_t gettid() noexcept
 {
 #ifdef SYS_gettid
     return syscall(SYS_gettid);
 #endif
 
     return 0;
+}
+
+//--------------------------------------------------------------------
+//
+// GetCoreDumpFilter
+//
+// Returns the core dump filter for the specified process id.
+//--------------------------------------------------------------------
+unsigned long GetCoreDumpFilter(int pid)
+{
+    unsigned long filter = -1;
+
+    char filepath[PATH_MAX];
+    snprintf(filepath, sizeof(filepath), "/proc/%d/coredump_filter", pid);
+
+    FILE* file = fopen(filepath, "r");
+    if (file != NULL)
+    {
+        int itemsRead = fscanf(file, "%lx", &filter);
+        if (itemsRead != 1)
+        {
+            filter = -1;
+        }
+    }
+
+    fclose(file);
+    return filter;
+}
+
+//--------------------------------------------------------------------
+//
+// SetCoreDumpFilter
+//
+// Sets the core dump filter for the specified process id.
+//--------------------------------------------------------------------
+bool SetCoreDumpFilter(int pid, unsigned long filter)
+{
+    bool ret = false;
+    char filepath[PATH_MAX];
+    snprintf(filepath, sizeof(filepath), "/proc/%d/coredump_filter", pid);
+
+    FILE *file = fopen(filepath, "w");
+    if (file != NULL)
+    {
+        if(fprintf(file, "%ld", filter) > 0)
+        {
+            ret = true;
+        }
+    }
+
+    fclose(file);
+    return ret;
 }
