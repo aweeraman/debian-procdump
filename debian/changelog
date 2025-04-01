@@ -1,3 +1,10 @@
+procdump (3.4.1-1~exp4) experimental; urgency=medium
+
+  * Team upload (salsa.d.o/debian namespace).
+  * B-D on bpftool/bpftrace
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Tue, 01 Apr 2025 15:13:02 +0200
+
 procdump (3.4.1-1~exp3) experimental; urgency=medium
 
   * Team upload (salsa.d.o/debian namespace).
