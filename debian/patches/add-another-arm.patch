@@ -1,5 +1,6 @@
 Description: Adapt upstream PR: #252 to fix armhf detection
 Author: Gianfranco Costamagna <locutusofborg@debian.org>
+Origin: https://github.com/microsoft/ProcDump-for-Linux/pull/273/commits
 Last-Update: 2025-03-29
 
 --- procdump-2.2.orig/Makefile

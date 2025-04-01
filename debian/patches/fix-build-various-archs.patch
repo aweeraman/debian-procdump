@@ -2,7 +2,6 @@ Description: Fix uname -p usage (reporting unknown in Debian)
 Remove tabs, to avoid a make error such as
 "Makefile:31: *** recipe commences before first target.  Stop."
 Author: Gianfranco Costamagna <locutusofborg@debian.org>
-Origin: https://github.com/microsoft/ProcDump-for-Linux/pull/273/commits
 Last-Update: 2025-03-27
 
 --- procdump-2.2.orig/Makefile
