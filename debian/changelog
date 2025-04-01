@@ -1,3 +1,13 @@
+procdump (3.4.1-1~exp1) experimental; urgency=medium
+
+  * Team upload (salsa.d.o/debian namespace).
+  * New upstream version 3.4.1
+  * Update copyright file for new release
+  * Add patch to fix mips64el, uncommitted to series file
+  * Drop upstream patches, cherry-pick merged 273 PR on top
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Tue, 01 Apr 2025 11:16:29 +0200
+
 procdump (2.2-4) unstable; urgency=medium
 
   * Team upload (salsa.d.o/debian namespace).
