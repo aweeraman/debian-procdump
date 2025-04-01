@@ -1,0 +1,505 @@
+From 29ff77067cedb272254e3981ad4cab401e832be9 Mon Sep 17 00:00:00 2001
+From: "FeRD (Frank Dana)" <ferdnyc@gmail.com>
+Date: Thu, 21 Dec 2023 03:43:22 -0500
+Subject: [PATCH 1/6] Add FindLibelf.cmake discovery module
+
+---
+ cmake/FindLibelf.cmake | 82 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 82 insertions(+)
+ create mode 100644 cmake/FindLibelf.cmake
+
+diff --git a/cmake/FindLibelf.cmake b/cmake/FindLibelf.cmake
+new file mode 100644
+index 0000000..fe11e26
+--- /dev/null
++++ b/cmake/FindLibelf.cmake
+@@ -0,0 +1,82 @@
++# Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
++# file Copyright.txt or https://cmake.org/licensing for details.
++
++#[=======================================================================[.rst:
++FindLibelf
++----------
++
++Find libelf headers and library.
++
++Imported Targets
++^^^^^^^^^^^^^^^^
++
++``Libelf::Libelf``
++  The libelf library, if found.
++
++Result Variables
++^^^^^^^^^^^^^^^^
++
++This will define the following variables in your project:
++
++``Libelf_FOUND``
++  true if (the requested version of) Libelf is available.
++``Libelf_VERSION``
++  the version of Libelf.
++``Libelf_LIBRARIES``
++  the libraries to link against to use Libelf.
++``Libelf_INCLUDE_DIRS``
++  where to find the Libelf headers.
++``Libelf_COMPILE_OPTIONS``
++  this should be passed to target_compile_options(), if the
++  target is not used for linking
++
++#]=======================================================================]
++
++
++# Use pkg-config to get the directories and then use these values
++# in the FIND_PATH() and FIND_LIBRARY() calls
++find_package(PkgConfig QUIET)
++pkg_check_modules(PKG_Libelf QUIET libelf)
++
++set(Libelf_COMPILE_OPTIONS ${PKG_Libelf_CFLAGS_OTHER})
++set(Libelf_VERSION ${PKG_Libelf_VERSION})
++
++find_path(Libelf_INCLUDE_DIR
++  NAMES
++    libelf.h
++  HINTS
++    ${PKG_Libelf_INCLUDE_DIRS}
++)
++find_library(Libelf_LIBRARY
++  NAMES
++    elf
++  HINTS
++    ${PKG_Libelf_LIBRARY_DIRS}
++)
++
++include(FindPackageHandleStandardArgs)
++find_package_handle_standard_args(Libelf
++  FOUND_VAR
++    Libelf_FOUND
++  REQUIRED_VARS
++    Libelf_LIBRARY
++    Libelf_INCLUDE_DIR
++  VERSION_VAR
++    Libelf_VERSION
++)
++
++if(Libelf_FOUND AND NOT TARGET Libelf::Libelf)
++  add_library(Libelf::Libelf UNKNOWN IMPORTED)
++  set_target_properties(Libelf::Libelf PROPERTIES
++    IMPORTED_LOCATION "${Libelf_LIBRARY}"
++    INTERFACE_COMPILE_OPTIONS "${Libelf_COMPILE_OPTIONS}"
++    INTERFACE_INCLUDE_DIRECTORIES "${Libelf_INCLUDE_DIR}"
++  )
++endif()
++
++mark_as_advanced(Libelf_LIBRARY Libelf_INCLUDE_DIR)
++
++if(Libelf_FOUND)
++  set(Libelf_LIBRARIES ${Libelf_LIBRARY})
++  set(Libelf_INCLUDE_DIRS ${Libelf_INCLUDE_DIR})
++endif()
+
+From aa6ced3215a31f9cf62db045e93aa1575910b117 Mon Sep 17 00:00:00 2001
+From: "FeRD (Frank Dana)" <ferdnyc@gmail.com>
+Date: Thu, 21 Dec 2023 03:43:44 -0500
+Subject: [PATCH 2/6] Add FindBpf.cmake discovery module
+
+---
+ cmake/FindBpf.cmake | 138 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 138 insertions(+)
+ create mode 100644 cmake/FindBpf.cmake
+
+diff --git a/cmake/FindBpf.cmake b/cmake/FindBpf.cmake
+new file mode 100644
+index 0000000..825c119
+--- /dev/null
++++ b/cmake/FindBpf.cmake
+@@ -0,0 +1,138 @@
++# Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
++# file Copyright.txt or https://cmake.org/licensing for details.
++
++#[=======================================================================[.rst:
++FindBpf
++----------
++
++Find libbpf headers and library, and bpftool executable.
++
++Imported Targets
++^^^^^^^^^^^^^^^^
++
++``Bpf::libbpf``
++  The libbpf library, if found.
++``Bpf::bpftool``
++  The bpftool executable, if found.
++
++Result Variables
++^^^^^^^^^^^^^^^^
++
++This will define some or all of the following variables
++in your project (depending on components selected):
++
++``Bpf_FOUND``
++  true if (the requested version of) libbpf and/or the bpftool
++  program are available.
++``Bpf_VERSION``
++  the version of libbpf.
++``Bpf_LIBRARIES``
++  the libraries to link against to use libbpf.
++``Bpf_INCLUDE_DIRS``
++  where to find the libbpf headers.
++``Bpf_COMPILE_OPTIONS``
++  this should be passed to target_compile_options(), if the
++  target is not used for linking
++``Bpf_BPFTOOL_EXECUTABLE``
++  the location of the bpftool binary.
++
++#]=======================================================================]
++
++if(NOT Bpf_FIND_COMPONENTS)
++  set(Bpf_FIND_COMPONENTS libbpf bpftool)
++endif()
++set(_required)
++
++if(libbpf IN_LIST Bpf_FIND_COMPONENTS)
++  # Use pkg-config to get the directories and then use these values
++  # in the FIND_PATH() and FIND_LIBRARY() calls
++  find_package(PkgConfig QUIET)
++  pkg_check_modules(PKG_Bpf QUIET libbpf)
++
++  set(Bpf_COMPILE_OPTIONS ${PKG_Bpf_CFLAGS_OTHER})
++  set(Bpf_VERSION ${PKG_Bpf_VERSION})
++
++  find_path(Bpf_INCLUDE_DIR
++    NAMES
++      bpf/libbpf.h
++    HINTS
++      ${PKG_Bpf_INCLUDE_DIRS}
++  )
++  mark_as_advanced(Bpf_INCLUDE_DIR)
++
++  find_library(Bpf_LIBRARY
++    NAMES
++      bpf
++    HINTS
++      ${PKG_Bpf_LIBRARY_DIRS}
++  )
++  mark_as_advanced(Bpf_LIBRARY)
++
++  if(Bpf_INCLUDE_DIR AND Bpf_LIBRARY)
++    set(Bpf_libbpf_FOUND TRUE)
++  endif()
++
++  list(APPEND _required Bpf_LIBRARY Bpf_INCLUDE_DIR)
++  set(_version Bpf_VERSION)
++
++  set(Bpf_LIBRARIES ${Bpf_LIBRARY})
++  set(Bpf_INCLUDE_DIRS ${Bpf_INCLUDE_DIR})
++endif()
++
++if(bpftool IN_LIST Bpf_FIND_COMPONENTS)
++  find_program(Bpf_BPFTOOL_EXECUTABLE
++    NAMES
++      bpftool
++  )
++  mark_as_advanced(Bpf_BPFTOOL_EXECUTABLE)
++
++  if(Bpf_BPFTOOL_EXECUTABLE)
++    set(Bpf_bpftool_FOUND TRUE)
++  endif()
++  list(APPEND _required Bpf_BPFTOOL_EXECUTABLE)
++  set(Bpf_BPFTOOL_EXECUTABLE ${Bpf_BPFTOOL_EXECUTABLE})
++endif()
++
++include(FindPackageHandleStandardArgs)
++
++# From CMake 3.18, HANDLE_COMPONENTS makes REQUIRED_VARS optional
++if(CMAKE_VERSION VERSION_LESS "3.18")
++  set(_required_vars
++    REQUIRED_VARS
++      ${_required}
++  )
++else()
++  set(_required_vars)
++endif()
++
++if(DEFINED _version)
++  set(_version_var
++    VERSION_VAR ${_version}
++  )
++else()
++  set(_version_var)
++endif()
++
++find_package_handle_standard_args(Bpf
++  FOUND_VAR
++    Bpf_FOUND
++  ${_version_var}
++  ${_required_vars}
++  HANDLE_COMPONENTS
++)
++
++if(Bpf_FOUND AND Bpf_LIBRARY AND NOT TARGET Bpf::libbpf)
++    add_library(Bpf::libbpf UNKNOWN IMPORTED)
++    set_target_properties(Bpf::libbpf PROPERTIES
++      IMPORTED_LOCATION "${Bpf_LIBRARY}"
++      INTERFACE_COMPILE_OPTIONS "${Bpf_COMPILE_OPTIONS}"
++      INTERFACE_INCLUDE_DIRECTORIES "${Bpf_INCLUDE_DIR}"
++    )
++endif()
++
++if(Bpf_FOUND AND Bpf_BPFTOOL_EXECUTABLE AND NOT TARGET Bpf::bpftool)
++    add_executable(Bpf::bpftool IMPORTED)
++    set_target_properties(Bpf::bpftool PROPERTIES
++      IMPORTED_LOCATION "${Bpf_BPFTOOL_EXECUTABLE}"
++    )
++endif()
+
+From cf890c2d1f2c395db20668547f8b20c83eb10902 Mon Sep 17 00:00:00 2001
+From: "FeRD (Frank Dana)" <ferdnyc@gmail.com>
+Date: Thu, 21 Dec 2023 03:43:52 -0500
+Subject: [PATCH 3/6] ebpf: Include bpf headers with bpf/ prefix
+
+---
+ ebpf/procdump_ebpf.h | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/ebpf/procdump_ebpf.h b/ebpf/procdump_ebpf.h
+index 94a2f2c..0e912d2 100644
+--- a/ebpf/procdump_ebpf.h
++++ b/ebpf/procdump_ebpf.h
+@@ -18,8 +18,8 @@
+ #define __PROCDUMP_EBPF_H__
+ 
+ #include "vmlinux.h"
+-#include <bpf_helpers.h>
+-#include <usdt.bpf.h>
++#include <bpf/bpf_helpers.h>
++#include <bpf/usdt.bpf.h>
+ 
+ #define USER_STACKID_FLAGS (0 | BPF_F_FAST_STACK_CMP | BPF_F_USER_STACK)
+ #define ARGS_HASH_SIZE 10240
+@@ -68,4 +68,4 @@ struct
+ 	__uint(max_entries, 10 * 1024 * 1024 /* 10 MB */);
+ } ringBuffer SEC(".maps");
+ 
+-#endif // __PROCDUMP_EBPF_H__
+\ No newline at end of file
++#endif // __PROCDUMP_EBPF_H__
+
+From 70a0ebdeb27b0f197f407d9a0e20e95a2f587a17 Mon Sep 17 00:00:00 2001
+From: Julio Faracco <jfaracco@redhat.com>
+Date: Fri, 31 Jan 2025 00:48:27 -0300
+Subject: [PATCH 4/6] CMake: Discover dependencies with find_package()
+
+Signed-off-by: Julio Faracco <jfaracco@redhat.com>
+---
+ CMakeLists.txt | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8744912..35299cf 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -242,8 +242,17 @@ if(NOT APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+ endif()
+ 
+ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+-  add_dependencies(procdump libbpf procdump_ebpf)
+-  target_link_libraries(procdump ${libbpf_SOURCE_DIR}/src/libbpf.a elf z pthread)
++  add_dependencies(procdump procdump_ebpf)
++
++  list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
++  find_package(Threads REQUIRED)
++  find_package(ZLIB REQUIRED)
++  find_package(Libelf REQUIRED)
++  target_link_libraries(procdump
++         Libelf::Libelf
++         ZLIB::ZLIB
++         Threads::Threads
++  )
+ else()
+   target_link_libraries(procdump z pthread)
+ endif()
+
+From 76330b02ed307adaabe82a8c39b4e161358883e3 Mon Sep 17 00:00:00 2001
+From: Julio Faracco <jfaracco@redhat.com>
+Date: Fri, 31 Jan 2025 00:53:12 -0300
+Subject: [PATCH 5/6] Link with system libbpf, if available
+
+- The local cmake/FindBpf.cmake module is used to discover an installed
+  libbpf, unless the PROCDUMP_DISABLE_SYSTEM_LIBBPF option is enabled
+- If system libbpf is disabled or not found, ExternalProject_Add is
+  used to retrieve libbpf sources, build, (NEW: and install into
+  PROJECT_BUILD_DIR/libbpf)
+- `LANGUAGES C CXX` added to project() command (aids CMake discovery
+  of parameters like correct library dir name)
+- `GNUInstallDirs` CMake module loaded, defines CMAKE_INCLUDE_DIR
+  and CMAKE_LIBRARY_DIR correctly relative to install prefix
+
+Signed-off-by: Julio Faracco <jfaracco@redhat.com>
+---
+ CMakeLists.txt | 52 +++++++++++++++++++++++++++++++++++---------------
+ 1 file changed, 37 insertions(+), 15 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 35299cf..28df5ef 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -31,14 +31,18 @@ cmake_policy(SET CMP0048 NEW)
+ # set the project name - version is MAJOR.MINOR.PATCH.RELEASE - releases start at 1
+ #
+ if (DEFINED ENV{VERSION})
+-  project(ProcDumpForLinux VERSION $ENV{VERSION})
++  project(ProcDumpForLinux VERSION $ENV{VERSION} LANGUAGES C CXX)
+ else()
+-  project(ProcDumpForLinux VERSION 0.0.0)
++  project(ProcDumpForLinux VERSION 0.0.0 LANGUAGES C CXX)
+ endif()
+ 
+ set(PROJECT_VERSION_TWEAK 0)
+ file(READ "dist/changelog" CHANGE_LOG)
+ 
++option(PROCDUMP_DISABLE_SYSTEM_LIBBPF "Don't attempt to use an installed libbpf" OFF)
++
++include(GNUInstallDirs)
++
+ #
+ # package name
+ #
+@@ -306,17 +310,35 @@ endif()
+ # Make ProcDump eBPF program
+ #
+ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+-  # Fetch libbpf
+-  include(ExternalProject)
+-
+-  ExternalProject_Add(libbpf
+-      GIT_REPOSITORY https://github.com/libbpf/libbpf.git
+-      GIT_TAG v1.2.2
+-      PREFIX ./libbpf
+-      CONFIGURE_COMMAND ""
+-      BUILD_COMMAND cd ../libbpf/src && bash -c "CFLAGS=\"-g -O2 -Werror -Wall -fPIC\" make"
+-      INSTALL_COMMAND ""
+-      )
++  # Attempt to use system-installed libbpf
++  if(NOT PROCDUMP_DISABLE_SYSTEM_LIBBPF)
++    find_package(Bpf COMPONENTS libbpf)
++    if(Bpf_FOUND)
++      set(libbpf_LINK Bpf::libbpf)
++      set(libbpf_INCLUDE "${Bpf_INCLUDE_DIRS}")
++    endif()
++  endif()
++
++  if(NOT Bpf_FOUND)
++    # Fetch libbpf
++    include(ExternalProject)
++
++    ExternalProject_Add(libbpf
++        GIT_REPOSITORY https://github.com/libbpf/libbpf.git
++        GIT_TAG v1.2.2
++        PREFIX ./libbpf
++        CONFIGURE_COMMAND ""
++        BUILD_COMMAND
++          cd ../libbpf/src &&
++          bash -c "CFLAGS=\"-g -O2 -Werror -Wall -fPIC\" make"
++        INSTALL_COMMAND
++          cd ../libbpf/src && bash -c "DESTDIR=<INSTALL_DIR> make install"
++        )
++    set(libbpf_LINK "${libbpf_BINARY_DIR}/usr/${CMAKE_INSTALL_LIBDIR}/libbpf.a")
++    set(libbpf_INCLUDE "${libbpf_BINARY_DIR}/usr/include")
++  endif()
++
++  target_link_libraries(procdump ${libbpf_LINK})
+ 
+   # set binaries and options for clang and llc
+   set(CLANG "clang")
+@@ -353,7 +375,7 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+                     #-I "/usr/include/x86_64-linux-gnu"
+                     -I "${CMAKE_SOURCE_DIR}"
+                     -I "${CMAKE_BINARY_DIR}"
+-                    -I "${libbpf_SOURCE_DIR}/src"
++                    -I "${libbpf_INCLUDE}"
+                     )
+ 
+   if(NOT APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+@@ -376,5 +398,5 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+                     DEPENDS ${procdump_ebpf_SOURCE_DIR}/procdump_ebpf.c
+                     )
+ 
+-  set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES procdump.ebpf.o)
++  add_dependencies(procdump_ebpf ${libbpf_LINK})
+ endif()
+
+From e64a7c44b4de482e43ef96f6868d3f5295f6ce34 Mon Sep 17 00:00:00 2001
+From: Julio Faracco <jfaracco@redhat.com>
+Date: Fri, 31 Jan 2025 00:56:50 -0300
+Subject: [PATCH 6/6] Use FindBpf.cmake to discover bpftool
+
+The repo's CMake Find module for Bpf includes the ability to discover
+the location of the `bpftool` executable and provide an executable
+target representing its location. Use that in commands to generate
+the various procdump_ebpf files.
+
+Also, split out the steps to generate files using bpftool into
+separate add_custom_command() invocations, so that dependencies
+between files are tracked and each output file will be automatically
+tagged as `GENERATED` by CMake (and deleted by the 'clean' target).
+
+Signed-off-by: Julio Faracco <jfaracco@redhat.com>
+---
+ CMakeLists.txt | 35 ++++++++++++++++++++++++++---------
+ 1 file changed, 26 insertions(+), 9 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 28df5ef..8015b05 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -338,6 +338,9 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+     set(libbpf_INCLUDE "${libbpf_BINARY_DIR}/usr/include")
+   endif()
+ 
++  # We always need to find the bpftool program
++  find_package(Bpf REQUIRED COMPONENTS bpftool)
++
+   target_link_libraries(procdump ${libbpf_LINK})
+ 
+   # set binaries and options for clang and llc
+@@ -386,17 +389,31 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+     list(APPEND CLANG_INCLUDES -I "/usr/include/x86_64-linux-gnu")
+   endif()
+ 
+-  add_custom_target(procdump_ebpf
+-                    DEPENDS procdump_ebpf.o
+-                  )
++  add_custom_command(OUTPUT procdump_ebpf.o
++    COMMAND "${CLANG}" -nostdinc -isystem `gcc -print-file-name=include` ${CLANG_INCLUDES} ${CLANG_DEFINES} -O2 ${CLANG_OPTIONS} -target bpf -fno-stack-protector -c "${procdump_ebpf_SOURCE_DIR}/procdump_ebpf.c" -o "procdump_ebpf.o"
++    COMMENT "Building EBPF object procdump_ebpf.o"
++    DEPENDS ${procdump_ebpf_SOURCE_DIR}/procdump_ebpf.c
++    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
++  )
++  add_custom_command(OUTPUT procdump.ebpf.o
++    COMMAND Bpf::bpftool gen object procdump.ebpf.o procdump_ebpf.o
++    COMMENT "Generating procdump.ebpf.o"
++    DEPENDS procdump_ebpf.o
++    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
++  )
+ 
+-  add_dependencies(procdump_ebpf libbpf)
++  add_custom_command(OUTPUT procdump_ebpf.skel.h
++    COMMAND Bpf::bpftool gen skeleton "procdump.ebpf.o" name "procdump_ebpf" > "procdump_ebpf.skel.h"
++    COMMENT "Writing EBPF header procdump_ebpf.skel.h"
++    DEPENDS procdump.ebpf.o
++    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
++  )
+ 
+-  add_custom_command(OUTPUT procdump_ebpf.o
+-                    COMMAND "${CLANG}" -nostdinc -isystem `gcc -print-file-name=include` ${CLANG_INCLUDES} ${CLANG_DEFINES} -O2 ${CLANG_OPTIONS} -target bpf -fno-stack-protector -c "${procdump_ebpf_SOURCE_DIR}/procdump_ebpf.c" -o "procdump_ebpf.o" && bpftool gen object procdump.ebpf.o procdump_ebpf.o && bpftool gen skeleton "procdump.ebpf.o" name "procdump_ebpf" > "procdump_ebpf.skel.h"
+-                    COMMENT "Building EBPF object procdump_ebpf.o"
+-                    DEPENDS ${procdump_ebpf_SOURCE_DIR}/procdump_ebpf.c
+-                    )
++  add_custom_target(procdump_ebpf DEPENDS
++    procdump_ebpf.o
++    procdump.ebpf.o
++    procdump_ebpf.skel.h
++  )
+ 
+   add_dependencies(procdump_ebpf ${libbpf_LINK})
+ endif()
